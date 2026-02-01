@@ -29,6 +29,35 @@ This skill enables **delegation of implementation work** from Claude Code (orche
 
 ## Invocation
 
+### Recommended: Background Execution
+
+**IMPORTANT**: Task implementation can take several minutes. Use background execution for better UX.
+
+**Use Bash tool with `run_in_background=true`:**
+
+```python
+# This allows Claude Code to continue orchestrating while Codex implements
+Bash(
+    command='~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "task-1-123" "..." "plan.md"',
+    run_in_background=True,
+    description="Implementing feature in background"
+)
+# Returns immediately with task_id for monitoring
+```
+
+**Benefits**:
+- ✅ Non-blocking: Claude Code can start other tasks in parallel
+- ✅ Completion notification: Automatic alert when implementation finishes
+- ✅ Error handling: Catches [BLOCKED] or failures automatically
+- ✅ Better UX: User sees progress across multiple tasks
+
+### Foreground Execution (Rare Cases Only)
+
+**Use foreground only when**:
+- Follow-up to [QUESTION] in existing session (continuation expected)
+- User explicitly requests step-by-step supervision
+- Very simple task (< 10 lines of code)
+
 ```bash
 # macOS Apple Silicon (pre-built, ready to use)
 ~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 \
@@ -42,6 +71,8 @@ This skill enables **delegation of implementation work** from Claude Code (orche
   "<task-description>" \
   "<plan-file-path>"
 ```
+
+**Warning**: Foreground execution blocks Claude Code for entire implementation (3-10 minutes). User cannot interact during this time. This severely degrades UX for complex tasks.
 
 ### Parameters
 
@@ -159,7 +190,7 @@ Options:
 ```
 
 **Claude Code action**:
-1. Stop execution (Ctrl+C)
+1. Stop execution (Ctrl+C or TaskStop if background)
 2. Ask user via AskUserQuestion tool
 3. Re-run with answer appended to task description
 
@@ -185,6 +216,90 @@ Options:
 ```
 
 **Claude Code action**: Mark task as completed
+
+---
+
+## Background Execution Workflow
+
+**Recommended pattern for all task execution:**
+
+### 1. Start Task in Background
+
+```python
+import time, random
+
+# Generate unique task ID
+task_id = f"task-1-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+
+# Run in background
+result = Bash(
+    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "{task_id}" "[task-desc]" "plan.md"',
+    run_in_background=True,
+    description="Implementing feature"
+)
+# result contains task_id for monitoring
+```
+
+### 2. Inform User
+
+```
+"Started implementing Task #1 in background. Codex will work autonomously and notify when complete. You can continue with other tasks in the meantime."
+```
+
+### 3. When Completion Notification Arrives
+
+Claude Code receives automatic notification when background task finishes.
+
+**Parse the output**:
+- Check for `[CODEX_COMPLETE]` - success
+- Check for `[BLOCKED]` or `[QUESTION]` - needs intervention
+- Check for `[FILES_MODIFIED]` - parse modified files
+- Check exit code - non-zero indicates error
+
+**Action based on result**:
+
+**Success**:
+```
+"Task #1 completed successfully. Codex modified:
+- src/components/UserAuth.tsx (created)
+- src/App.tsx (modified)
+
+Would you like me to review the changes or move to the next task?"
+```
+
+**Needs intervention**:
+```
+"Task #1 needs your input:
+[QUESTION] Should I use localStorage or sessionStorage?
+
+Please choose and I'll continue the task."
+```
+
+**Error**:
+```
+"Task #1 encountered an error:
+[BLOCKED] API_BASE_URL not defined in config
+
+Let me resolve this and restart the task."
+```
+
+### 4. Parallel Task Execution
+
+Background execution enables parallel implementation:
+
+```python
+# Start multiple tasks concurrently
+task_ids = []
+for i, task_desc in enumerate(tasks):
+    tid = f"task-{i}-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+    Bash(
+        command=f'execute-task-darwin-arm64 "{tid}" "{task_desc}" "plan.md"',
+        run_in_background=True
+    )
+    task_ids.append(tid)
+
+# All tasks run in parallel, Claude Code handles completions as they arrive
+```
 
 ---
 
@@ -282,7 +397,7 @@ See [appendix/SECURITY.md](appendix/SECURITY.md) for detailed analysis and recom
 
 ---
 
-## Complete Workflow Example
+## Complete Workflow Example (Background Execution)
 
 ### 1. Claude Code Creates Plan
 ```markdown
@@ -293,11 +408,11 @@ Create login component with JWT validation
 ```
 
 ### 2. Claude Code Prepares Context
-```typescript
-// Read patterns to include
-const pattern = await Read("src/components/LoginForm.tsx");
+```python
+# Read patterns to include
+pattern = Read("src/components/LoginForm.tsx")
 
-const taskDesc = `
+task_desc = """
 Implement UserAuth component.
 
 Requirements:
@@ -309,15 +424,28 @@ Requirements:
 
 Match LoginForm.tsx pattern (read file).
 Use apiCall from lib/api.ts.
-`;
+"""
 ```
 
-### 3. Invoke Codex
-```bash
-./execute-task.py "task-3" "${taskDesc}" ".claude/plans/auth.md"
+### 3. Invoke Codex in Background
+```python
+import time, random
+
+# Generate unique task ID
+task_id = f"task-3-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+
+# Start in background
+Bash(
+    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "{task_id}" "{task_desc}" ".claude/plans/auth.md"',
+    run_in_background=True,
+    description="Implementing UserAuth component"
+)
+
+# Tell user immediately
+"Started Task #3 (UserAuth component) in background. Will notify when complete."
 ```
 
-### 4. Codex Output
+### 4. Codex Output (Background)
 ```
 [PROGRESS] Exploring existing patterns
 [Tool: Glob] src/components/**/*.tsx
@@ -325,13 +453,6 @@ Use apiCall from lib/api.ts.
 
 [PROGRESS] Creating UserAuth component
 [Tool: Write] src/components/UserAuth.tsx
-
-[QUESTION] Validation on blur or on submit?
-Options:
-1. On blur - Immediate feedback
-2. On submit - Less intrusive
-
-Continuing with on submit (LoginForm pattern)...
 
 [PROGRESS] Integrating into App
 [Tool: Edit] src/App.tsx
@@ -343,11 +464,33 @@ Continuing with on submit (LoginForm pattern)...
 [CODEX_COMPLETE] Task completed in 8 iterations
 ```
 
-### 5. Claude Code Processes
-- Parses [FILES_MODIFIED]
-- Updates task status → completed
-- Shows user summary
-- Moves to next task
+### 5. Claude Code Receives Completion Notification
+
+**Parse output and respond to user**:
+```
+"Task #3 completed successfully! Codex implemented:
+- src/components/UserAuth.tsx (created)
+- src/App.tsx (modified - added UserAuth to routes)
+
+The component matches LoginForm.tsx patterns and includes error handling for empty fields and network errors. Would you like me to review the implementation or proceed to the next task?"
+```
+
+### 6. Handle Multiple Tasks in Parallel
+
+```python
+# Start all tasks concurrently
+for task in plan.tasks:
+    task_id = f"task-{task.number}-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+    Bash(
+        command=f'execute-task-darwin-arm64 "{task_id}" "{task.description}" "plan.md"',
+        run_in_background=True
+    )
+
+"Started 5 tasks in parallel. Will update you as each completes."
+
+# Claude Code handles completions as notifications arrive
+# Can continue working on other aspects of the project
+```
 
 ---
 

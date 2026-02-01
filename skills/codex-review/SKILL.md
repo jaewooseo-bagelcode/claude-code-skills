@@ -11,9 +11,40 @@ Execute Codex-powered code review with complete context preparation.
 
 ## Invocation
 
+### Recommended: Background Execution
+
+**IMPORTANT**: Code reviews can take several minutes. Use background execution for better UX.
+
+**Use Bash tool with `run_in_background=true`:**
+
+```python
+# This allows Claude Code to continue working while review runs
+Bash(
+    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "..."',
+    run_in_background=True,
+    description="Running code review in background"
+)
+# Returns immediately with task_id
+```
+
+**Benefits**:
+- ✅ Non-blocking: Claude Code can handle other tasks
+- ✅ Completion notification: Automatic alert when review finishes
+- ✅ Error handling: Catches failures and shows to user
+- ✅ Better UX: User sees progress, not frozen terminal
+
+### Foreground Execution (Rare Cases Only)
+
+**Use foreground only when**:
+- Follow-up question in existing review session (quick response expected)
+- User explicitly requests immediate/interactive review
+- Single file, very focused review (< 100 lines)
+
 ```bash
 ~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "{session-id}" "{review-prompt}"
 ```
+
+**Warning**: Foreground execution blocks Claude Code for entire review duration (2-5 minutes). User cannot interact during this time.
 
 **Session ID**: Generate unique ID per review using `review-{timestamp}-{random-hex}` format. See Session Management section for generation code.
 
@@ -289,7 +320,7 @@ Codex analyzes code across 5 dimensions:
 
 ## Complete Workflow Examples
 
-### Example 1: Rich Conversation Context
+### Example 1: Rich Conversation Context (Background Execution)
 
 ```
 [Earlier in conversation]
@@ -307,8 +338,12 @@ You (Claude Code):
 - Location: Line 45, login function
 - Issue: SQL errors in production
 
-[Invoke immediately with rich context]
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "
+[Generate unique session ID]
+session_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+
+[Invoke in background with rich context]
+Bash(
+    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-1738224567-a3f9" "
 Code Review Request:
 
 FILES:
@@ -324,7 +359,17 @@ CONTEXT:
 - Need to check for SQL injection vulnerabilities
 
 PRIORITY: Security vulnerabilities first, then code quality
-"
+"',
+    run_in_background=True,
+    description="Reviewing auth.ts for security"
+)
+
+[Tell user immediately]
+"Started security review of auth.ts in background, focusing on the SQL injection vulnerability at line 45. Will notify when complete."
+
+[When completion notification arrives]
+[Parse output and summarize key findings]
+"Code review complete. Found critical SQL injection vulnerability in login function (line 45). The query uses string concatenation instead of parameterized queries. Recommendation: Use prepared statements with parameterized queries. Would you like me to implement the fix?"
 ```
 
 ### Example 2: Minimal Context - Ask First
@@ -379,16 +424,43 @@ PRIORITY: Security and bugs first, then performance and quality
 "
 ```
 
+## Background Execution Workflow
+
+**Recommended pattern for all reviews:**
+
+1. **Start review in background**:
+```python
+Bash(
+    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "[context]"',
+    run_in_background=True
+)
+```
+
+2. **Inform user**:
+```
+"Starting code review in background. This may take 2-5 minutes depending on complexity. I'll notify you when complete."
+```
+
+3. **When completion notification arrives**:
+   - Parse output for issues found
+   - Summarize key findings for user
+   - Offer to explain details or fix issues
+
+4. **Handle errors gracefully**:
+   - If review fails, check exit code and stderr
+   - Provide actionable error message to user
+
 ## Best Practices
 
 1. **Use conversation context**: Don't ask if you already know
-2. **Fetch latest docs with Context7**: When code uses external libraries, query Context7 BEFORE invoking
-3. **Preview files**: Use Read tool to check file content and detect dependencies
-4. **Identify related files**: Check imports, dependencies, tests
-5. **Provide git diff**: If reviewing changes, include diff in context
-6. **Be specific**: "Security audit for SQL injection" > "Review this"
-7. **Batch related files**: Review login.ts + middleware.ts together rather than separately
-8. **Default to comprehensive**: If focus unclear but file is clear, do comprehensive review
+2. **Run in background**: Default to background execution for better UX
+3. **Fetch latest docs with Context7**: When code uses external libraries, query Context7 BEFORE invoking
+4. **Preview files**: Use Read tool to check file content and detect dependencies
+5. **Identify related files**: Check imports, dependencies, tests
+6. **Provide git diff**: If reviewing changes, include diff in context
+7. **Be specific**: "Security audit for SQL injection" > "Review this"
+8. **Batch related files**: Review login.ts + middleware.ts together rather than separately
+9. **Default to comprehensive**: If focus unclear but file is clear, do comprehensive review
 
 ### When to Use Context7
 
