@@ -25,7 +25,7 @@ Professional code review and analysis using GPT-5.2-Codex (READ-ONLY).
 
 ```bash
 # Install all skills
-git clone https://github.com/YOUR_USERNAME/claude-code-skills.git ~/.claude-skills-repo
+git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git ~/.claude-skills-repo
 ln -s ~/.claude-skills-repo/skills/* ~/.claude/skills/
 
 # Or install specific skill only
@@ -41,7 +41,7 @@ Add to your OpenSkills configuration:
   "marketplaces": [
     {
       "name": "personal-skills",
-      "url": "https://github.com/YOUR_USERNAME/claude-code-skills"
+      "url": "https://github.com/jaewooseo-bagelcode/claude-code-skills"
     }
   ]
 }
@@ -56,7 +56,7 @@ Then install:
 
 ```bash
 # Clone to project
-git clone https://github.com/YOUR_USERNAME/claude-code-skills.git .claude-skills-repo
+git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git .claude-skills-repo
 ln -s .claude-skills-repo/skills/codex-review .claude/skills/codex-review
 ```
 
