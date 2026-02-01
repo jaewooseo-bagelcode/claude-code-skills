@@ -100,20 +100,19 @@ Both codex skills share common Go implementation:
 - Analyzes security, bugs, performance, code quality
 - Does NOT modify code
 - Uses GPT-5.2-Codex model
-- **Execution**: Background (can take 2-5 minutes)
+- **Duration**: 2-5 minutes per review
 - **Session format**: `review-{timestamp}-{random-hex}`
 
 **codex-task-executor**: WRITE implementation
 - Implements features from plans
 - Modifies/creates files with full tool access
 - Uses GPT-5.2-Codex model
-- **Execution**: Background (can take 3-10 minutes)
+- **Duration**: 3-10 minutes per task
 - **Session format**: `task-{number}-{timestamp}-{random-hex}`
 
 **skill-creator**: Meta-tool for skill development
 - Provides templates and validation
 - Scripts for init/package/validate
-- **Execution**: Immediate (Python scripts)
 
 ## Skill Creation Principles
 
@@ -135,63 +134,20 @@ When creating or modifying skills:
 
 5. **Progressive disclosure**: Reference detailed docs from SKILL.md, load only when needed.
 
-## Background Task Lifecycle
-
-**How background execution improves process management:**
-
-### Without Background (Current Pain Point)
-```
-User: "Review these 3 files"
-Claude Code: [Blocks for 15 minutes while codex reviews all files]
-User: [Waits, cannot do other work]
-Claude Code: [Finally returns results]
-```
-
-### With Background (Recommended)
-```
-User: "Review these 3 files"
-Claude Code: [Starts 3 reviews in background, returns immediately]
-             "Started 3 reviews in background (file1, file2, file3)..."
-User: [Can continue working, ask other questions]
-Claude Code: [Receives notification] "Review #1 complete: file1 has security issues..."
-Claude Code: [Receives notification] "Review #2 complete: file2 looks good..."
-Claude Code: [Receives notification] "Review #3 complete: file3 has performance issues..."
-```
-
-**Process management benefits**:
-- Claude Code remains responsive during long operations
-- Can handle multiple codex tasks concurrently
-- User gets incremental updates instead of waiting for everything
-- Errors in one task don't block others
-- Can queue up next work while previous tasks run
-
-### Monitoring Background Tasks
-
-**Built-in**: Claude Code automatically receives completion notifications
-
-**Manual check** (if needed):
-```bash
-# List running background tasks
-/tasks
-
-# Check output of specific task
-TaskOutput(task_id="task-abc123")
-```
-
 ## Session Management
 
 Both codex skills use session persistence:
 
 **Location**: `{repo}/.codex-sessions/` (project-isolated, git-ignored)
 
-**Session ID format**: Use timestamp + random hex to avoid collisions:
-```python
-import time, random
-session_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-# → "review-1738224567-a3f9"
-```
+**Session naming**: Use plan file pattern (adjective-verb-noun) for readable, unique names.
 
-**Why**: Prevents session file collisions when multiple Claude Code instances run simultaneously.
+**Examples**:
+- `security-reviewing-turing`
+- `auth-implementing-lovelace`
+- `performance-auditing-knuth`
+
+**Follow-up**: Reuse same session name to continue conversation.
 
 ## Environment Variables
 
@@ -206,113 +162,6 @@ Optional configuration:
 - `STATE_DIR`: Session storage location (default: `{repo}/.codex-sessions`)
 
 ## Key Patterns
-
-### Background Execution for Codex Skills (Recommended)
-
-**CRITICAL**: Both codex skills can take several minutes to complete. Always use background execution unless there's a specific reason not to.
-
-**Pattern for codex-review**:
-```python
-import time, random
-session_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-
-# Run in background
-Bash(
-    command=f'~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "{session_id}" "[context]"',
-    run_in_background=True,
-    description="Running code review"
-)
-
-# Inform user immediately
-"Started code review in background. Will notify when complete."
-```
-
-**Pattern for codex-task-executor**:
-```python
-import time, random
-task_id = f"task-1-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-
-# Run in background
-Bash(
-    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "{task_id}" "[desc]" "plan.md"',
-    run_in_background=True,
-    description="Implementing feature"
-)
-
-# Inform user immediately
-"Started Task #1 implementation in background. Will notify when complete."
-```
-
-**When completion notification arrives**:
-1. Parse output for markers: `[CODEX_COMPLETE]`, `[FILES_MODIFIED]`, `[BLOCKED]`, `[QUESTION]`
-2. Handle appropriately:
-   - **Success**: Summarize results to user
-   - **Needs input**: Ask user via AskUserQuestion, then re-run
-   - **Error**: Diagnose and resolve, then re-run
-3. Update task status if using TaskCreate/TaskUpdate
-
-**Output marker handling guide**:
-
-```python
-# After completion notification
-output = result.output
-
-if "[CODEX_COMPLETE]" in output:
-    # Success - parse and summarize
-    files = extract_between(output, "[FILES_MODIFIED]", "[CODEX_COMPLETE]")
-    "Task completed. Modified files: {files}"
-
-elif "[QUESTION]" in output:
-    # Needs user input
-    question = extract_after(output, "[QUESTION]")
-    # Ask user via AskUserQuestion
-    # Re-run with same session-id and appended answer
-
-elif "[BLOCKED]" in output:
-    # Cannot proceed
-    blocker = extract_after(output, "[BLOCKED]")
-    # Resolve blocker (create file, set env var, etc.)
-    # Re-run with same session-id
-
-else:
-    # Check exit code for errors
-    if exit_code != 0:
-        "Task failed with error. Check stderr for details."
-```
-
-**Benefits**:
-- Non-blocking: Handle multiple tasks concurrently
-- Better UX: User sees progress notifications
-- Error resilience: Automatic failure detection and handling
-- Parallel execution: Run multiple codex tasks simultaneously
-- Continue working: Claude Code can plan next tasks while Codex implements
-
-**Complete example with parallel execution**:
-```python
-# User: "Review auth.ts for security and implement the fixes"
-
-# Step 1: Start review in background
-review_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-Bash(
-    command=f'codex-review-darwin-arm64 "{review_id}" "Review auth.ts for security"',
-    run_in_background=True
-)
-"Started security review in background..."
-
-# Step 2: When review completes (notification arrives)
-# Parse findings: SQL injection at line 45, weak password hashing at line 78
-
-# Step 3: Start implementation in background
-task_id = f"task-1-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-Bash(
-    command=f'execute-task-darwin-arm64 "{task_id}" "Fix SQL injection at line 45..." "plan.md"',
-    run_in_background=True
-)
-"Started implementing security fixes in background..."
-
-# Step 4: When implementation completes
-"Security fixes implemented. Modified auth.ts to use parameterized queries and bcrypt for passwords."
-```
 
 ### Context Preparation for Codex Skills
 
@@ -376,6 +225,66 @@ claude-code-skills/
 
 ## Development Guidelines
 
+### Implementation Approval Policy
+
+**CRITICAL**: Before implementing any code changes, new features, or architectural modifications, ALWAYS:
+
+1. **Explain the proposed approach**
+   - What will be modified
+   - How it will work
+   - Why this approach was chosen
+
+2. **Present alternatives** when multiple valid approaches exist
+   - Compare pros/cons
+   - Recommend preferred option
+
+3. **Ask for explicit user approval**
+   - Wait for confirmation
+   - Do NOT assume approval
+
+4. **Only implement after receiving approval**
+
+**This applies to**:
+- Modifying Go source code in skills (`scripts/*.go`)
+- Adding new features or functionality
+- Changing skill behavior or architecture
+- Updating binary implementations
+- Modifying SKILL.md instructions
+- Adding new dependencies
+
+**Does NOT apply to**:
+- Documentation updates (README.md, CLAUDE.md)
+- Bug fixes for obvious errors
+- Formatting/style changes
+
+**Example workflow**:
+```
+User: "백그라운드 완료되면 알림 보내줘"
+
+Claude Code:
+"macOS 알림을 추가할 수 있습니다. 제안하는 방법:
+
+접근 1: Go 코드에 osascript 통합
+- main.go에서 완료 시 osascript 실행
+- NOTIFY_ON_COMPLETE 환경 변수로 제어
+- 장점: 네이티브 macOS 알림, 추가 설치 불필요
+- 단점: 바이너리 재빌드 필요
+
+접근 2: Bash 서브에이전트 사용
+- Task tool로 Bash 서브에이전트에게 위임
+- 완료되면 자동으로 결과 반환
+- 장점: 코드 수정 불필요, 자동화된 흐름
+- 단점: 서브에이전트 오버헤드
+
+어느 방법으로 구현할까요?"
+
+[Wait for user approval]
+
+User: "2번으로 해"
+
+Claude Code: [Proceeds with approach 2]
+```
+
 ### GitHub Operations Policy
 
 **IMPORTANT**: Always request user approval before performing GitHub operations:
@@ -395,10 +304,8 @@ claude-code-skills/
 
 ## Important Notes
 
-- **Background execution required**: Both codex skills take several minutes. Always use `run_in_background=True` for better UX
 - **Binary distribution**: Pre-built macOS ARM64 binaries included in `bin/` for immediate use
 - **Multi-platform support**: Build from source for Linux/Windows using BUILD.md instructions
 - **Session isolation**: Each skill maintains separate session storage to prevent cross-contamination
 - **Security**: Go implementation uses openat syscalls on Unix for symlink/TOCTOU protection
 - **No package.json**: Pure Go and Python, no npm dependencies required
-- **Parallel execution**: Background mode enables running multiple codex tasks concurrently

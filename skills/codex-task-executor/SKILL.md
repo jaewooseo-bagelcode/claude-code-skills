@@ -29,50 +29,37 @@ This skill enables **delegation of implementation work** from Claude Code (orche
 
 ## Invocation
 
-### Recommended: Background Execution
-
-**IMPORTANT**: Task implementation can take several minutes. Use background execution for better UX.
-
-**Use Bash tool with `run_in_background=true`:**
-
-```python
-# This allows Claude Code to continue orchestrating while Codex implements
-Bash(
-    command='~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "task-1-123" "..." "plan.md"',
-    run_in_background=True,
-    description="Implementing feature in background"
-)
-# Returns immediately with task_id for monitoring
-```
-
-**Benefits**:
-- ✅ Non-blocking: Claude Code can start other tasks in parallel
-- ✅ Completion notification: Automatic alert when implementation finishes
-- ✅ Error handling: Catches [BLOCKED] or failures automatically
-- ✅ Better UX: User sees progress across multiple tasks
-
-### Foreground Execution (Rare Cases Only)
-
-**Use foreground only when**:
-- Follow-up to [QUESTION] in existing session (continuation expected)
-- User explicitly requests step-by-step supervision
-- Very simple task (< 10 lines of code)
-
 ```bash
-# macOS Apple Silicon (pre-built, ready to use)
-~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 \
-  "<task-id>" \
-  "<task-description>" \
-  "<plan-file-path>"
-
-# Other platforms (after building - see BUILD.md)
-~/.claude/skills/codex-task-executor/bin/execute-task \
-  "<task-id>" \
-  "<task-description>" \
-  "<plan-file-path>"
+~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "<task-name>" "<task-description>" "<plan-file-path>"
 ```
 
-**Warning**: Foreground execution blocks Claude Code for entire implementation (3-10 minutes). User cannot interact during this time. This severely degrades UX for complex tasks.
+**Task Name**: Generate using plan file pattern (adjective-verb-noun).
+- Examples: "auth-implementing-lovelace", "ui-building-hopper"
+- Same name for follow-up if [QUESTION] appears
+
+**Task Description**: Structured description for Codex implementation (see Context Preparation below).
+
+**Plan File**: Path to plan markdown file with overall architecture.
+
+**Example**:
+```python
+task_description = """
+Implement UserAuth component with JWT validation.
+
+Requirements:
+- Email/password inputs, POST /api/auth/login
+- Store JWT, redirect to /dashboard
+- Error handling
+
+Patterns: Read LoginForm.tsx, use apiCall from lib/api.ts
+Edge Cases: Empty fields, network errors, 401 responses
+"""
+
+Bash(
+    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "auth-implementing-lovelace" "{task_description}" "plan.md"',
+    description="Implementing UserAuth"
+)
+```
 
 ### Parameters
 
@@ -88,81 +75,56 @@ Bash(
    - Absolute or relative path
    - Contains overall architecture and context
 
-### IMPORTANT: Task ID Uniqueness
+### Task Naming
 
-**When multiple Claude Code sessions run simultaneously**, task IDs must be globally unique to prevent session file collisions.
-
-**Generate unique task IDs with timestamp or random suffix:**
-
-```python
-import time, random
-
-# Method 1: Timestamp-based
-task_id = f"task-1-{int(time.time())}"
-# → "task-1-1738224567"
-
-# Method 2: Timestamp + Random (recommended)
-task_id = f"task-1-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-# → "task-1-1738224567-a3f9"
-
-# Method 3: Using TaskCreate ID
-task_id = f"task-{task.id}"  # If TaskCreate returns unique ID
-```
-
-**Examples:**
-```bash
-# ✅ Good (unique)
-./execute-task.py "task-1-1738224567-a3f9" "..." "plan.md"
-./execute-task.py "implement-auth-fe82a1" "..." "plan.md"
-
-# ❌ Bad (collision risk)
-./execute-task.py "task-1" "..." "plan.md"
-./execute-task.py "implement-auth" "..." "plan.md"
-```
-
-**Why:** Session files are stored as `{task-id}.json`. If two sessions use the same task-id, they will overwrite each other's conversation state.
+**Generate using plan file pattern** (adjective-verb-noun):
+- Examples: "auth-implementing-lovelace", "ui-building-hopper"
+- Unique and readable
+- Reuse for follow-up if [QUESTION] appears
 
 ## Context Preparation (Claude Code's Role)
 
 Before invoking this skill, Claude Code should provide rich context. The more context, the better Codex performs.
 
-### Required Context
+### Task Description Structure (CRITICAL)
 
-**Minimal invocation:**
-```bash
-./execute-task.py "task-1" \
-  "Add login button to navbar" \
-  ".claude/plans/auth-feature.md"
+Include in task description passed to Codex:
+
+**Requirements**:
+- Specific requirements with acceptance criteria
+- What to build, what behavior to implement
+
+**Patterns to Match**:
+- Existing code files to reference (e.g., "Read LoginForm.tsx for patterns")
+- Helpers and utilities to use (e.g., "Use apiCall from lib/api.ts")
+- Styling and structure conventions to follow
+
+**Integration Points**:
+- Where to add/modify code
+- Which files to update
+- How to connect with existing systems
+
+**Edge Cases**:
+- Input validation scenarios
+- Error handling requirements
+- Network/API failure cases
+
+**Example task description format**:
 ```
+Implement UserAuth component with JWT validation.
 
-### Rich Context (Recommended)
+Requirements:
+- Email/password form inputs
+- POST /api/auth/login, store JWT, redirect to /dashboard
+- Display inline error messages
 
-Include in task description:
-- **Specific requirements** with acceptance criteria
-- **Existing patterns** to match (mention file names)
-- **Integration points** (where to add/modify)
-- **Edge cases** to handle
-
-**Example:**
-```bash
-./execute-task.py "task-3" \
-  "Implement UserAuth component with JWT validation.
-
-  Requirements:
-  - Email/password form
-  - Call POST /api/auth/login
-  - Store JWT in localStorage
-  - Redirect to /dashboard on success
-  - Display errors inline
-
-  Match LoginForm.tsx style (read for patterns).
-  Use apiCall helper from lib/api.ts.
-  Handle: empty fields, network errors, 401 responses." \
-  ".claude/plans/auth-system.md"
+Patterns: Read LoginForm.tsx for structure, use apiCall from lib/api.ts
+Edge Cases: Empty fields, network errors, 401 responses
 ```
 
 ### Automatically Included
 
+Codex binary automatically loads:
 - **Plan file contents**: Full plan markdown
 - **CLAUDE.md**: Project guidelines (if exists)
 - **Repository root**: Auto-detected from git
@@ -190,9 +152,9 @@ Options:
 ```
 
 **Claude Code action**:
-1. Stop execution (Ctrl+C or TaskStop if background)
+1. Subagent pauses execution when [QUESTION] appears
 2. Ask user via AskUserQuestion tool
-3. Re-run with answer appended to task description
+3. Re-invoke with answer appended to task description
 
 ### [BLOCKED] - Cannot Proceed
 ```
@@ -219,36 +181,45 @@ Options:
 
 ---
 
-## Background Execution Workflow
+## Subagent Execution Workflow
 
-**Recommended pattern for all task execution:**
+**Pattern with structured contexts:**
 
-### 1. Start Task in Background
+### 1. Build Both Contexts
+
+Structure Codex input AND subagent task:
 
 ```python
-import time, random
+# Codex input - detailed and organized (CRITICAL)
+task_description = """
+Implement UserAuth component with JWT validation.
 
-# Generate unique task ID
-task_id = f"task-1-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+Requirements:
+- Email/password inputs with validation
+- POST /API/auth/login, store JWT, redirect to /dashboard
+- Display inline error messages
 
-# Run in background
-result = Bash(
-    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "{task_id}" "[task-desc]" "plan.md"',
-    run_in_background=True,
-    description="Implementing feature"
+Patterns to Match:
+- Read LoginForm.tsx for form structure
+- Use apiCall helper from lib/api.ts
+
+Edge Cases:
+- Empty fields, network errors, 401 responses
+"""
+
+Bash(
+    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "auth-implementing-lovelace" "{task_description}" "plan.md"',
+    description="Implementing UserAuth"
 )
-# result contains task_id for monitoring
 ```
 
 ### 2. Inform User
 
-```
-"Started implementing Task #1 in background. Codex will work autonomously and notify when complete. You can continue with other tasks in the meantime."
-```
+"Delegating implementation to subagent. Will process results when complete."
 
-### 3. When Completion Notification Arrives
+### 3. Subagent Automatically Returns
 
-Claude Code receives automatic notification when background task finishes.
+**No manual checking needed** - subagent returns output when complete.
 
 **Parse the output**:
 - Check for `[CODEX_COMPLETE]` - success
@@ -272,7 +243,7 @@ Would you like me to review the changes or move to the next task?"
 "Task #1 needs your input:
 [QUESTION] Should I use localStorage or sessionStorage?
 
-Please choose and I'll continue the task."
+Please choose and I'll restart the task with your answer."
 ```
 
 **Error**:
@@ -285,20 +256,20 @@ Let me resolve this and restart the task."
 
 ### 4. Parallel Task Execution
 
-Background execution enables parallel implementation:
+Subagent delegation enables parallel implementation:
 
 ```python
-# Start multiple tasks concurrently
-task_ids = []
+# Delegate multiple tasks concurrently
 for i, task_desc in enumerate(tasks):
-    tid = f"task-{i}-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-    Bash(
-        command=f'execute-task-darwin-arm64 "{tid}" "{task_desc}" "plan.md"',
-        run_in_background=True
-    )
-    task_ids.append(tid)
+    # Generate unique task name (plan file pattern)
+    task_name = f"task{i}-implementing-{['lovelace', 'hopper', 'turing', 'knuth'][i % 4]}"
 
-# All tasks run in parallel, Claude Code handles completions as they arrive
+    Bash(
+        command=f'execute-task-darwin-arm64 "{task_name}" "{task_desc}" "plan.md"',
+        description=f"Task #{i}"
+    )
+
+# All subagents run in parallel, each auto-returns when complete
 ```
 
 ---
@@ -317,40 +288,19 @@ Sessions stored per-task in project directory:
 
 **CRITICAL: Concurrent Session Safety**
 
-When multiple Claude Code sessions run simultaneously on the same project, they must use **unique task IDs** to avoid session file collisions.
+When multiple Claude Code sessions run simultaneously, use **unique task IDs** (timestamp + random) to avoid session file collisions.
 
-**Safe pattern** (generated in "Task ID Uniqueness" section above):
-```bash
-# Session A
-./execute-task.py "task-1-1738224567-a3f9" "..." "plan.md"
+**Safe**: Different sessions use different IDs
+- Session A: `task-1-1738224567-a3f9`
+- Session B: `task-1-1738224590-b2d1`
+- ✅ No collision: Different session files
 
-# Session B (different timestamp/random)
-./execute-task.py "task-1-1738224590-b2d1" "..." "plan.md"
+**Unsafe**: Same simple ID across sessions
+- Session A: `task-1`
+- Session B: `task-1`
+- ❌ COLLISION: Both write to same task-1.json
 
-# ✅ No collision: Different session files
-```
-
-**Unsafe pattern:**
-```bash
-# Session A
-./execute-task.py "task-1" "..." "plan.md"
-
-# Session B
-./execute-task.py "task-1" "..." "plan.md"
-
-# ❌ COLLISION: Both write to same task-1.json
-```
-
-**Follow-up example:**
-```bash
-# Initial
-./execute-task.py "task-3-1738224567-a3f9" "Implement auth" "plan.md"
-# → Asks question
-
-# Follow-up (same task-id for continuation)
-./execute-task.py "task-3-1738224567-a3f9" "Use localStorage" "plan.md"
-# → Continues same conversation
-```
+**Follow-up conversations**: Use same task-id in new Task invocation to continue conversation.
 
 ---
 
@@ -397,7 +347,7 @@ See [appendix/SECURITY.md](appendix/SECURITY.md) for detailed analysis and recom
 
 ---
 
-## Complete Workflow Example (Background Execution)
+## Complete Workflow Example (Subagent Delegation)
 
 ### 1. Claude Code Creates Plan
 ```markdown
@@ -427,25 +377,18 @@ Use apiCall from lib/api.ts.
 """
 ```
 
-### 3. Invoke Codex in Background
+### 3. Execute with Bash
 ```python
-import time, random
-
-# Generate unique task ID
-task_id = f"task-3-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-
-# Start in background
 Bash(
-    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "{task_id}" "{task_desc}" ".claude/plans/auth.md"',
-    run_in_background=True,
-    description="Implementing UserAuth component"
+    command=f'~/.claude/skills/codex-task-executor/bin/execute-task-darwin-arm64 "auth-implementing-lovelace" "{task_desc}" ".claude/plans/auth.md"',
+    description="Implementing UserAuth"
 )
 
 # Tell user immediately
-"Started Task #3 (UserAuth component) in background. Will notify when complete."
+"Delegated Task #3 to subagent. Will process results when complete."
 ```
 
-### 4. Codex Output (Background)
+### 4. Codex Output (In Subagent)
 ```
 [PROGRESS] Exploring existing patterns
 [Tool: Glob] src/components/**/*.tsx
@@ -464,9 +407,9 @@ Bash(
 [CODEX_COMPLETE] Task completed in 8 iterations
 ```
 
-### 5. Claude Code Receives Completion Notification
+### 5. Subagent Auto-Returns Results
 
-**Parse output and respond to user**:
+**Claude Code parses and responds to user**:
 ```
 "Task #3 completed successfully! Codex implemented:
 - src/components/UserAuth.tsx (created)
@@ -475,21 +418,20 @@ Bash(
 The component matches LoginForm.tsx patterns and includes error handling for empty fields and network errors. Would you like me to review the implementation or proceed to the next task?"
 ```
 
-### 6. Handle Multiple Tasks in Parallel
+### 6. Parallel Task Delegation
 
 ```python
-# Start all tasks concurrently
+# Execute all tasks in parallel
 for task in plan.tasks:
-    task_id = f"task-{task.number}-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
+    # Generate task name (plan file pattern)
+    task_name = f"task{task.number}-implementing-{get_random_scientist()}"
+
     Bash(
-        command=f'execute-task-darwin-arm64 "{task_id}" "{task.description}" "plan.md"',
-        run_in_background=True
+        command=f'execute-task-darwin-arm64 "{task_name}" "{task.description}" "plan.md"',
+        description=f"Task #{task.number}"
     )
 
-"Started 5 tasks in parallel. Will update you as each completes."
-
-# Claude Code handles completions as notifications arrive
-# Can continue working on other aspects of the project
+"Delegated 5 tasks to subagents in parallel. Will process each as they complete."
 ```
 
 ---

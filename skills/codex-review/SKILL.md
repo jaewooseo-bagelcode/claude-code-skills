@@ -11,49 +11,31 @@ Execute Codex-powered code review with complete context preparation.
 
 ## Invocation
 
-### Recommended: Background Execution
-
-**IMPORTANT**: Code reviews can take several minutes. Use background execution for better UX.
-
-**Use Bash tool with `run_in_background=true`:**
-
-```python
-# This allows Claude Code to continue working while review runs
-Bash(
-    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "..."',
-    run_in_background=True,
-    description="Running code review in background"
-)
-# Returns immediately with task_id
-```
-
-**Benefits**:
-- ✅ Non-blocking: Claude Code can handle other tasks
-- ✅ Completion notification: Automatic alert when review finishes
-- ✅ Error handling: Catches failures and shows to user
-- ✅ Better UX: User sees progress, not frozen terminal
-
-### Foreground Execution (Rare Cases Only)
-
-**Use foreground only when**:
-- Follow-up question in existing review session (quick response expected)
-- User explicitly requests immediate/interactive review
-- Single file, very focused review (< 100 lines)
-
 ```bash
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "{session-id}" "{review-prompt}"
+~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "<session-name>" "<review-context>"
 ```
 
-**Warning**: Foreground execution blocks Claude Code for entire review duration (2-5 minutes). User cannot interact during this time.
+**Session Name**: Generate using plan file pattern (adjective-verb-noun).
+- Examples: "security-reviewing-turing", "auth-analyzing-hopper"
+- Same name for follow-up questions in same review
 
-**Session ID**: Generate unique ID per review using `review-{timestamp}-{random-hex}` format. See Session Management section for generation code.
+**Review Context**: Structured context for Codex analysis (see Context Preparation below).
 
-**Go Implementation Benefits**:
-- ✅ 10-100x faster performance
-- ✅ 9.5/10 security on macOS/Linux - perfect symlink/TOCTOU protection via openat
-- ✅ 5.7MB single binary, zero runtime dependencies
-- ✅ 30 minute max timeout for deep analysis
-- ✅ For other platforms, see [appendix/BUILD.md](appendix/BUILD.md)
+**Example**:
+```python
+review_context = """
+Code Review Request:
+
+FILES: src/auth/login.ts
+FOCUS: Security - SQL injection
+PRIORITY: Critical security first
+"""
+
+Bash(
+    command=f'~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "security-reviewing-turing" "{review_context}"',
+    description="Security review"
+)
+```
 
 ## Context Preparation (Critical)
 
@@ -135,89 +117,43 @@ Example:
 - Code uses SQL → Query Context7 for SQL injection prevention
 ```
 
-**Template:**
-```bash
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "
+**Pattern with Context7:**
+```python
+# Query Context7 first
+context7_react = query_context7("React 19 best practices")
+
+# Build enriched review context
+review_context = """
 Code Review Request:
 
-FILES:
-- src/Component.tsx (React component)
+FILES: src/Component.tsx (React component)
 
 FOCUS: Best practices compliance + Security
 
-EXTERNAL DEPENDENCIES:
-- React 19 (latest from Context7):
-  * Use new 'use' hook for data fetching
-  * Avoid deprecated componentDidMount
-  * Server Components best practices: ...
+EXTERNAL DEPENDENCIES (from Context7):
+- React 19: Use new 'use' hook, avoid componentDidMount, Server Components best practices...
 
-CONTEXT:
-- User concerned about following latest React patterns
-- Check for deprecated APIs and security issues
-
+CONTEXT: Check for deprecated APIs and security issues
 PRIORITY: Modern React compliance, then security
-"
+"""
+
+Bash(
+    command=f'codex-review "{session_id}" "{review_context}"',
+    description="React review"
+)
 ```
 
-## Invocation Pattern
-
-### ❌ Bad (Vague Context)
-```bash
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "Review auth.ts"
-```
-
-### ✅ Good (Complete Context)
-```bash
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "Review src/auth.ts for security vulnerabilities, specifically SQL injection and authentication bypass. Also check related files: src/middleware/auth.ts and src/routes/user.ts. Context: Production incident where user reported unauthorized access. Focus on login and session management logic."
-```
-
-### ✅ Better (Structured Context)
-```bash
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "
-Code Review Request:
-
-FILES:
-- src/auth/login.ts (primary)
-- src/middleware/session.ts (related)
-- tests/auth.test.ts (tests)
-
-FOCUS: Security (Critical) + Bugs (High)
-- SQL injection vulnerabilities
-- Authentication bypass risks
-- Session management flaws
-
-SCOPE: Login flow and session handling
-
-CONTEXT:
-- Recent production incident: unauthorized access via /api/login
-- Error logs show suspicious query patterns
-- User reported being able to access other accounts
-
-PRIORITY: Critical security issues first, then logic bugs
-"
-```
 
 ## Session Management
 
-Generate unique session ID per review:
-```python
-import time, random
-session_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-```
+**Session naming**: Use plan file pattern (adjective-verb-noun) for readable, unique names.
 
-**Reuse same session ID** for follow-up questions in the same review.
+**Examples**:
+- `security-reviewing-turing`
+- `performance-auditing-knuth`
+- `auth-analyzing-hopper`
 
-**Example workflows:**
-```bash
-# Initial review
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-1738224567-a3f9" "[detailed context]"
-
-# Follow-up question (same session)
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-1738224567-a3f9" "How to fix the SQL injection in login.ts:45?"
-
-# New review = new session
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-1738224590-b2d1" "[new review context]"
-```
+**Follow-up**: Reuse same session name to continue conversation.
 
 ## Context Construction Workflow
 
@@ -320,7 +256,7 @@ Codex analyzes code across 5 dimensions:
 
 ## Complete Workflow Examples
 
-### Example 1: Rich Conversation Context (Background Execution)
+### Example 1: Rich Conversation Context (Subagent Delegation)
 
 ```
 [Earlier in conversation]
@@ -338,12 +274,8 @@ You (Claude Code):
 - Location: Line 45, login function
 - Issue: SQL errors in production
 
-[Generate unique session ID]
-session_id = f"review-{int(time.time())}-{random.randint(0x1000, 0xffff):04x}"
-
-[Invoke in background with rich context]
-Bash(
-    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-1738224567-a3f9" "
+[Build review context]
+review_context = """
 Code Review Request:
 
 FILES:
@@ -356,20 +288,22 @@ FOCUS: Security (CRITICAL)
 CONTEXT:
 - Production SQL errors
 - Login function at line 45 uses string concatenation
-- Need to check for SQL injection vulnerabilities
 
-PRIORITY: Security vulnerabilities first, then code quality
-"',
-    run_in_background=True,
-    description="Reviewing auth.ts for security"
+PRIORITY: Security vulnerabilities first
+"""
+
+[Execute with Bash]
+Bash(
+    command=f'~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "security-reviewing-turing" "{review_context}"',
+    description="Security review"
 )
 
 [Tell user immediately]
-"Started security review of auth.ts in background, focusing on the SQL injection vulnerability at line 45. Will notify when complete."
+"Delegated security review to subagent. Analyzing SQL injection vulnerability at line 45..."
 
-[When completion notification arrives]
-[Parse output and summarize key findings]
-"Code review complete. Found critical SQL injection vulnerability in login function (line 45). The query uses string concatenation instead of parameterized queries. Recommendation: Use prepared statements with parameterized queries. Would you like me to implement the fix?"
+[Subagent auto-returns results]
+[Parse output and summarize]
+"Review complete. Found critical SQL injection vulnerability in login function (line 45). Uses string concatenation instead of parameterized queries. Would you like me to implement the fix?"
 ```
 
 ### Example 2: Minimal Context - Ask First
@@ -404,56 +338,25 @@ You (Claude Code):
 [Infer from context]
 - File: src/auth/login.ts (just read)
 - Focus: Comprehensive (not specified, default to all aspects)
-- Context: User wanted to review after reading
 
-[Invoke with reasonable assumptions]
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "
-Code Review Request:
-
-FILES:
-- src/auth/login.ts (primary)
-
+[Execute with Bash]
+review_context = """
+FILES: src/auth/login.ts
 FOCUS: Comprehensive review
-- Security, bugs, performance, code quality
+PRIORITY: Security and bugs first
+"""
 
-CONTEXT:
-- File was just reviewed in conversation
-- Looking for general code quality and potential issues
-
-PRIORITY: Security and bugs first, then performance and quality
-"
-```
-
-## Background Execution Workflow
-
-**Recommended pattern for all reviews:**
-
-1. **Start review in background**:
-```python
 Bash(
-    command='~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "[context]"',
-    run_in_background=True
+    command=f'codex-review-darwin-arm64 "comprehensive-reviewing-lovelace" "{review_context}"',
+    description="Comprehensive review"
 )
 ```
 
-2. **Inform user**:
-```
-"Starting code review in background. This may take 2-5 minutes depending on complexity. I'll notify you when complete."
-```
-
-3. **When completion notification arrives**:
-   - Parse output for issues found
-   - Summarize key findings for user
-   - Offer to explain details or fix issues
-
-4. **Handle errors gracefully**:
-   - If review fails, check exit code and stderr
-   - Provide actionable error message to user
 
 ## Best Practices
 
 1. **Use conversation context**: Don't ask if you already know
-2. **Run in background**: Default to background execution for better UX
+2. **Delegate to subagent**: Default to Bash subagent with haiku model for better UX
 3. **Fetch latest docs with Context7**: When code uses external libraries, query Context7 BEFORE invoking
 4. **Preview files**: Use Read tool to check file content and detect dependencies
 5. **Identify related files**: Check imports, dependencies, tests
@@ -461,6 +364,7 @@ Bash(
 7. **Be specific**: "Security audit for SQL injection" > "Review this"
 8. **Batch related files**: Review login.ts + middleware.ts together rather than separately
 9. **Default to comprehensive**: If focus unclear but file is clear, do comprehensive review
+10. **Parallel reviews**: Use multiple subagents to review different files concurrently
 
 ### When to Use Context7
 
@@ -474,20 +378,19 @@ Detect and fetch docs for:
 - Any external dependency for best practices/security guidelines
 
 **Workflow (AUTOMATIC):**
-```bash
+```python
 # Step 1: Read file and detect imports automatically
-Read src/api/auth.ts
+Read("src/api/auth.ts")
 # → Detects: import express, jsonwebtoken, bcrypt
 
-# Step 2: Automatically query Context7 for each detected library
-Context7: "Express.js security best practices 2026"
-Context7: "JWT token validation security guidelines"
-Context7: "bcrypt password hashing best practices"
+# Step 2: Query Context7 for each library
+context7_express = query_context7("Express.js security best practices 2026")
+context7_jwt = query_context7("JWT token validation security guidelines")
+context7_bcrypt = query_context7("bcrypt password hashing best practices")
 
-# Step 3: Build enriched prompt with Context7 results
-~/.claude/skills/codex-review/bin/codex-review-darwin-arm64 "review-123" "
+# Step 3: Build enriched review context
+review_context = """
 FILES: src/api/auth.ts
-
 FOCUS: Security
 
 EXTERNAL DEPENDENCIES (from Context7):
@@ -496,7 +399,13 @@ EXTERNAL DEPENDENCIES (from Context7):
 - bcrypt: Use saltRounds >= 12, async methods only...
 
 Check code compliance with these latest guidelines.
-"
+"""
+
+# Step 4: Execute
+Bash(
+    command=f'codex-review "{session_id}" "{review_context}"',
+    description="Security review"
+)
 ```
 
 **This process should happen automatically** - don't ask user if they want Context7 docs.
