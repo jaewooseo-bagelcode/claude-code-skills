@@ -1,0 +1,36 @@
+# Session files (all skills)
+.codex-sessions/
+skills/*/.codex-sessions/
+skills/*/scripts/.sessions/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Go build artifacts (preserve binaries)
+skills/*/scripts/codex-review
+skills/*/scripts/execute-task
+!skills/*/bin/*
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
