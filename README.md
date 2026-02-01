@@ -36,43 +36,44 @@ Execute coding tasks using GPT-5.2-Codex (WRITES CODE).
 
 ## Installation
 
-### Method 1: Install from GitHub (Recommended)
+### Method 1: OpenSkills (Recommended)
 
 ```bash
 # Install all skills
+npx openskills install jaewooseo-bagelcode/claude-code-skills
+npx openskills sync
+
+# Or install to global (~/.claude/skills/)
+npx openskills install jaewooseo-bagelcode/claude-code-skills --global
+npx openskills sync
+```
+
+**Individual skills**:
+```bash
+# Install specific skill only
+npx openskills install jaewooseo-bagelcode/claude-code-skills/skills/codex-review
+npx openskills sync
+```
+
+**Update skills**:
+```bash
+# Update all
+npx openskills update
+
+# Update specific skills
+npx openskills update codex-review,codex-task-executor
+```
+
+### Method 2: Manual Git Clone
+
+```bash
+# Global installation
 git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git ~/.claude-skills-repo
 ln -s ~/.claude-skills-repo/skills/* ~/.claude/skills/
 
-# Or install specific skill only
-ln -s ~/.claude-skills-repo/skills/codex-review ~/.claude/skills/codex-review
-```
-
-### Method 2: OpenSkills Installation
-
-Add to your OpenSkills configuration:
-
-```json
-{
-  "marketplaces": [
-    {
-      "name": "personal-skills",
-      "url": "https://github.com/jaewooseo-bagelcode/claude-code-skills"
-    }
-  ]
-}
-```
-
-Then install:
-```bash
-/plugin install codex-review@personal-skills
-```
-
-### Method 3: Project-Local Installation
-
-```bash
-# Clone to project
-git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git .claude-skills-repo
-ln -s .claude-skills-repo/skills/codex-review .claude/skills/codex-review
+# Project-local installation
+git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git
+ln -s $(pwd)/claude-code-skills/skills/* .claude/skills/
 ```
 
 ## Requirements
