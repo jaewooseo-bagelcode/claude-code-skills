@@ -15,9 +15,24 @@ Professional code review and analysis using GPT-5.2-Codex (READ-ONLY).
 - 📝 Code quality (SOLID principles, anti-patterns)
 - 🔧 Refactoring suggestions
 
-**Tech**: Go implementation, 9.5/10 security, 100x faster than Python
+**Tech**: Go implementation, 9.5/10 security, 100x faster, 5.7MB binary
 
 [View Details](skills/codex-review/SKILL.md)
+
+### codex-task-executor
+
+Execute coding tasks using GPT-5.2-Codex (WRITES CODE).
+
+**Features**:
+- ✍️ Implements features from plans
+- 🔨 Creates and modifies files
+- 🔄 Multi-turn conversations with progress markers
+- 📝 Works from Claude Code's task specifications
+- 🛠️ Full Write/Edit/Read/Grep/Glob tools
+
+**Tech**: Go implementation, 9.5/10 security, 8.3MB binary
+
+[View Details](skills/codex-task-executor/SKILL.md)
 
 ## Installation
 
@@ -62,9 +77,12 @@ ln -s .claude-skills-repo/skills/codex-review .claude/skills/codex-review
 
 ## Requirements
 
-Each skill may have different requirements. See individual skill documentation:
+**All skills require**:
+- `OPENAI_API_KEY` environment variable
 
-- **codex-review**: Requires `OPENAI_API_KEY`, macOS/Linux/Windows supported
+**Platform support**:
+- ✅ macOS Apple Silicon (pre-built binaries included)
+- ✅ Linux, Windows (build from source - see appendix/BUILD.md in each skill)
 
 ## Development
 
@@ -93,9 +111,10 @@ claude-code-skills/
 
 ## Skills Included
 
-| Skill | Description | Status |
-|-------|-------------|--------|
-| [codex-review](skills/codex-review/) | Code review with GPT-5.2-Codex | ✅ Ready |
+| Skill | Description | Type | Status |
+|-------|-------------|------|--------|
+| [codex-review](skills/codex-review/) | Code review & analysis | READ-ONLY | ✅ Ready |
+| [codex-task-executor](skills/codex-task-executor/) | Coding task execution | WRITE | ✅ Ready |
 
 ## Contributing
 
