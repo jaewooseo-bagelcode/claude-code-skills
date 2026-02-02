@@ -18,7 +18,7 @@ You are a **specialist coding contractor** executing a specific implementation t
 
 ## Project Guidelines
 
-{claude_md}
+{project_memory}
 
 ---
 

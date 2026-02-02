@@ -69,7 +69,7 @@ func createConversation(apiKey, systemPrompt string) (string, error) {
 }
 
 // buildSystemPrompt loads system-prompt.md and substitutes variables
-func buildSystemPrompt(repoRoot, taskID, taskDesc, planContent, claudeMD string) string {
+func buildSystemPrompt(repoRoot, taskID, taskDesc, planContent, projectMemory string) string {
 	scriptDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 	promptPath := filepath.Join(scriptDir, "system-prompt.md")
 
@@ -94,7 +94,7 @@ func buildSystemPrompt(repoRoot, taskID, taskDesc, planContent, claudeMD string)
 Implement the task using available tools. Report progress with [PROGRESS] markers.
 
 Available Tools: Glob, Grep, Read, Write, Edit
-`, taskID, repoRoot, taskDesc, planContent, claudeMD)
+`, taskID, repoRoot, taskDesc, planContent, projectMemory)
 	}
 
 	prompt := string(template)
@@ -102,7 +102,7 @@ Available Tools: Glob, Grep, Read, Write, Edit
 	prompt = strings.ReplaceAll(prompt, "{task_id}", taskID)
 	prompt = strings.ReplaceAll(prompt, "{task_description}", taskDesc)
 	prompt = strings.ReplaceAll(prompt, "{plan_content}", planContent)
-	prompt = strings.ReplaceAll(prompt, "{claude_md}", claudeMD)
+	prompt = strings.ReplaceAll(prompt, "{project_memory}", projectMemory)
 
 	return prompt
 }

@@ -69,7 +69,7 @@ func createConversation(apiKey, systemPrompt string) (string, error) {
 }
 
 // buildSystemPrompt loads system-prompt-en.md and substitutes variables
-func buildSystemPrompt(repoRoot, sessionName string) string {
+func buildSystemPrompt(repoRoot, sessionName, projectMemory string) string {
 	scriptDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 	promptPath := filepath.Join(scriptDir, "system-prompt-en.md")
 
@@ -83,6 +83,12 @@ You are a professional code reviewer with extensive experience.
 Repository Root: %s
 Session: %s
 
+## Project Guidelines
+
+%s
+
+---
+
 **CRITICAL: You provide READ-ONLY analysis.** Identify issues and provide suggestions, but do NOT modify code.
 
 Available Tools: Glob, Grep, Read
@@ -95,12 +101,13 @@ Analyze code across 5 dimensions:
 - 🔧 Refactoring
 
 Provide detailed markdown reports with actionable suggestions.
-`, repoRoot, sessionName)
+`, repoRoot, sessionName, projectMemory)
 	}
 
 	prompt := string(template)
 	prompt = strings.ReplaceAll(prompt, "{repo_root}", repoRoot)
 	prompt = strings.ReplaceAll(prompt, "{session_name}", sessionName)
+	prompt = strings.ReplaceAll(prompt, "{project_memory}", projectMemory)
 
 	return prompt
 }
