@@ -5,7 +5,7 @@ tools: Bash, Read, Glob, Grep
 skills:
   - codex-review
   - codex-task-executor
-model: haiku
+model: opus
 ---
 
 # Acodex Agent
