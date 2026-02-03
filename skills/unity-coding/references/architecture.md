@@ -1,12 +1,15 @@
 # Architecture Patterns
 
-System + Manager 패턴, Singleton, GameManager 구조.
+System + Manager 패턴, Singleton, GameManager 구조, 고급 패턴.
 
 ## Table of Contents
 1. [System + Manager 패턴](#system--manager-패턴)
 2. [Singleton 베이스 클래스](#singleton-베이스-클래스)
 3. [GameManager 구조](#gamemanager-구조)
 4. [실전 예제](#실전-예제)
+5. [Advanced: MonoBase](#advanced-monobase) - IDisposable 자동 관리
+6. [Advanced: Component Pool](#advanced-component-pool) - 컴포넌트 기반 풀링
+7. [Advanced: Async FSM](#advanced-async-fsm) - UniTask 기반 상태 머신
 
 ---
 
@@ -378,5 +381,331 @@ public class EnemyAsset : ScriptableObject
 
     public GameObject GetPrefab(EnemyType type) => _enemies.Find(e => e.type == type)?.prefab;
     public EnemyData GetData(EnemyType type) => _enemies.Find(e => e.type == type)?.data;
+}
+```
+
+---
+
+## Advanced: MonoBase
+
+프로젝트가 커지면 IDisposable 관리와 CancellationToken 처리가 중요해짐.
+
+### MonoBase - IDisposable 자동 정리
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Threading;
+
+public abstract class MonoBase : MonoBehaviour, ICollection<IDisposable>
+{
+    private readonly List<IDisposable> _disposables = new();
+    protected CancellationTokenSource DisableCts { get; private set; }
+
+    public int Count => _disposables.Count;
+    public bool IsReadOnly => false;
+
+    protected virtual void OnEnable()
+    {
+        DisableCts?.Cancel();
+        DisableCts?.Dispose();
+        DisableCts = new CancellationTokenSource();
+    }
+
+    protected virtual void OnDisable()
+    {
+        DisableCts?.Cancel();
+        DisableCts?.Dispose();
+        DisableCts = null;
+    }
+
+    protected virtual void OnDestroy()
+    {
+        foreach (var d in _disposables)
+            d?.Dispose();
+        _disposables.Clear();
+    }
+
+    // ICollection<IDisposable>
+    public void Add(IDisposable item) => _disposables.Add(item);
+    public void Clear() => _disposables.Clear();
+    public bool Contains(IDisposable item) => _disposables.Contains(item);
+    public void CopyTo(IDisposable[] array, int index) => _disposables.CopyTo(array, index);
+    public bool Remove(IDisposable item) => _disposables.Remove(item);
+    public IEnumerator<IDisposable> GetEnumerator() => _disposables.GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+}
+```
+
+### 사용 예
+```csharp
+public class PlayerController : MonoBase
+{
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+
+        // Rx 구독 자동 정리
+        Add(GameEvents.OnScoreChanged.Subscribe(OnScoreChanged));
+
+        // 이벤트 구독 (IDisposable 래퍼)
+        Add(Disposable.Create(() => SomeEvent -= Handler));
+        SomeEvent += Handler;
+    }
+
+    async void StartAsync()
+    {
+        // OnDisable 시 자동 취소
+        await SomeAsyncOperation(DisableCts.Token);
+    }
+}
+```
+
+---
+
+## Advanced: Component Pool
+
+각 프리팹별로 ObjectPool 컴포넌트를 붙이는 방식. 인스펙터에서 설정 가능.
+
+### ObjectPool (컴포넌트)
+```csharp
+public class ObjectPool : MonoBehaviour
+{
+    [SerializeField] private GameObject _prefab;
+    [SerializeField] private int _poolSize = 10;
+
+    private List<PooledObject> _available = new();
+
+    void Awake() => CreatePool();
+
+    public void CreatePool()
+    {
+        while (_available.Count < _poolSize)
+            _available.Add(CreateObject());
+    }
+
+    public PooledObject Get(bool activate = true)
+    {
+        PooledObject obj;
+        if (_available.Count > 0)
+        {
+            obj = _available[^1];
+            _available.RemoveAt(_available.Count - 1);
+        }
+        else
+        {
+            obj = CreateObject();
+        }
+
+        if (activate) obj.gameObject.SetActive(true);
+        return obj;
+    }
+
+    public void Return(PooledObject obj)
+    {
+        obj.gameObject.SetActive(false);
+        obj.transform.SetParent(transform, false);
+        _available.Add(obj);
+    }
+
+    private PooledObject CreateObject()
+    {
+        var go = Instantiate(_prefab, transform);
+        go.name = _prefab.name;
+        go.SetActive(false);
+
+        var po = go.GetComponent<PooledObject>() ?? go.AddComponent<PooledObject>();
+        po.Pool = this;
+        return po;
+    }
+}
+```
+
+### PooledObject (자기 반환)
+```csharp
+public class PooledObject : MonoBehaviour
+{
+    public ObjectPool Pool { get; set; }
+
+    public void ReturnToPool()
+    {
+        if (Pool != null)
+            Pool.Return(this);
+        else
+            Destroy(gameObject);
+    }
+
+    public void ReturnAfter(float delay)
+    {
+        Invoke(nameof(ReturnToPool), delay);
+    }
+}
+```
+
+### 사용
+```csharp
+// 인스펙터에서 Pool 참조
+[SerializeField] private ObjectPool _bulletPool;
+
+void Fire()
+{
+    var bullet = _bulletPool.Get();
+    bullet.transform.position = firePoint.position;
+    bullet.GetComponent<Bullet>().Init(direction);
+}
+
+// Bullet.cs
+void OnHit()
+{
+    GetComponent<PooledObject>().ReturnToPool();
+}
+```
+
+---
+
+## Advanced: Async FSM
+
+UniTask 기반 비동기 상태 머신. 복잡한 게임 플로우에 적합.
+
+### IState 인터페이스
+```csharp
+using Cysharp.Threading.Tasks;
+using System.Threading;
+
+public interface IState<TFSM>
+{
+    string Name { get; }
+    UniTask Enter(CancellationToken token);
+    UniTask Update(CancellationToken token);
+    UniTask Leave(CancellationToken token);
+    void AddTransition(string trigger, IState<TFSM> state);
+    IState<TFSM> GetTransition(string trigger);
+}
+```
+
+### FSM 베이스
+```csharp
+public abstract class FSM<TFSM> : MonoBehaviour where TFSM : FSM<TFSM>
+{
+    public IState<TFSM> CurrentState { get; private set; }
+    private IState<TFSM> _nextState;
+    private CancellationTokenSource _cts;
+
+    protected virtual void OnDestroy()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    public void InitState(IState<TFSM> state)
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _nextState = state;
+        UpdateLoopAsync(_cts.Token).Forget();
+    }
+
+    private async UniTaskVoid UpdateLoopAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            await ProcessState(token);
+            await UniTask.NextFrame(token);
+        }
+    }
+
+    private async UniTask ProcessState(CancellationToken token)
+    {
+        if (CurrentState != null)
+            await CurrentState.Update(token);
+
+        if (_nextState != null)
+        {
+            if (CurrentState != null)
+                await CurrentState.Leave(token);
+
+            CurrentState = _nextState;
+            _nextState = null;
+
+            if (CurrentState != null)
+                await CurrentState.Enter(token);
+        }
+    }
+
+    public void Trigger(string trigger)
+    {
+        if (CurrentState == null || _nextState != null) return;
+
+        var next = CurrentState.GetTransition(trigger);
+        if (next != null) _nextState = next;
+    }
+}
+```
+
+### State 베이스
+```csharp
+public abstract class State<TFSM> : IState<TFSM> where TFSM : FSM<TFSM>
+{
+    protected TFSM FSM { get; }
+    public string Name { get; }
+
+    private Dictionary<string, IState<TFSM>> _transitions = new();
+
+    protected State(string name, TFSM fsm)
+    {
+        Name = name;
+        FSM = fsm;
+    }
+
+    public void AddTransition(string trigger, IState<TFSM> state) => _transitions[trigger] = state;
+    public IState<TFSM> GetTransition(string trigger) => _transitions.GetValueOrDefault(trigger);
+
+    public async UniTask Enter(CancellationToken token) => await OnEnter(token);
+    public async UniTask Update(CancellationToken token) => await OnUpdate(token);
+    public async UniTask Leave(CancellationToken token) => await OnLeave(token);
+
+    protected abstract UniTask OnEnter(CancellationToken token);
+    protected abstract UniTask OnUpdate(CancellationToken token);
+    protected abstract UniTask OnLeave(CancellationToken token);
+}
+```
+
+### 사용 예
+```csharp
+public class GameFSM : FSM<GameFSM>
+{
+    void Start()
+    {
+        var idle = new IdleState("Idle", this);
+        var play = new PlayState("Play", this);
+        var result = new ResultState("Result", this);
+
+        idle.AddTransition("start", play);
+        play.AddTransition("win", result);
+        play.AddTransition("lose", result);
+        result.AddTransition("retry", idle);
+
+        InitState(idle);
+    }
+}
+
+public class PlayState : State<GameFSM>
+{
+    public PlayState(string name, GameFSM fsm) : base(name, fsm) { }
+
+    protected override async UniTask OnEnter(CancellationToken token)
+    {
+        await UISystem.ShowAsync<UIPlay>(token);
+    }
+
+    protected override async UniTask OnUpdate(CancellationToken token)
+    {
+        // 게임 로직
+        await UniTask.Yield();
+    }
+
+    protected override async UniTask OnLeave(CancellationToken token)
+    {
+        await UISystem.HideAsync<UIPlay>(token);
+    }
 }
 ```

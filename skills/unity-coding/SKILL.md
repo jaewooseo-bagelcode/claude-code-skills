@@ -62,3 +62,10 @@ Assets/__GameName/
 | 성능 문제, GC 스파이크 | [performance.md](references/performance.md) |
 | 빌드 사이즈 줄이기 | [build-optimization.md](references/build-optimization.md) |
 | 코드 리뷰 체크리스트 | [anti-patterns.md](references/anti-patterns.md) |
+
+### Advanced Patterns (프로젝트 성장 시)
+| 상황 | 참조 |
+|------|------|
+| Rx/async 구독 자동 정리 | [architecture.md#advanced-monobase](references/architecture.md) |
+| 인스펙터 기반 풀 설정 | [architecture.md#advanced-component-pool](references/architecture.md) |
+| 복잡한 게임 플로우 | [architecture.md#advanced-async-fsm](references/architecture.md) |
