@@ -1,15 +1,16 @@
 # Architecture Patterns
 
-System + Manager 패턴, Singleton, GameManager 구조, 고급 패턴.
+System + Manager 패턴, Singleton, GameManager 구조, 이벤트 통신, 고급 패턴.
 
 ## Table of Contents
 1. [System + Manager 패턴](#system--manager-패턴)
 2. [Singleton 베이스 클래스](#singleton-베이스-클래스)
 3. [GameManager 구조](#gamemanager-구조)
 4. [실전 예제](#실전-예제)
-5. [Advanced: MonoBase](#advanced-monobase) - IDisposable 자동 관리
-6. [Advanced: Component Pool](#advanced-component-pool) - 컴포넌트 기반 풀링
-7. [Advanced: Async FSM](#advanced-async-fsm) - UniTask 기반 상태 머신
+5. [GameEvents (C# Static Events)](#gameevents-c-static-events) - 코드 기반 이벤트 버스
+6. [Advanced: MonoBase](#advanced-monobase) - IDisposable 자동 관리
+7. [Advanced: Component Pool](#advanced-component-pool) - 컴포넌트 기반 풀링
+8. [Advanced: Async FSM](#advanced-async-fsm) - UniTask 기반 상태 머신
 
 ---
 
@@ -383,6 +384,154 @@ public class EnemyAsset : ScriptableObject
     public EnemyData GetData(EnemyType type) => _enemies.Find(e => e.type == type)?.data;
 }
 ```
+
+---
+
+## GameEvents (C# Static Events)
+
+ScriptableObject 없이 순수 코드로 이벤트 버스 구현. AI 친화적.
+
+### 장점
+- ScriptableObject 에셋 생성 불필요
+- IDE 자동완성, 리팩토링 완전 지원
+- 컴파일 타임 검증
+- 명확한 스택 트레이스
+
+### GameEvents 클래스
+```csharp
+using System;
+using UnityEngine;
+
+public static class GameEvents
+{
+    // Game state events
+    public static event Action OnGameStarted;
+    public static event Action OnGamePaused;
+    public static event Action OnGameResumed;
+    public static event Action OnGameOver;
+
+    // Player events
+    public static event Action OnPlayerDied;
+    public static event Action OnPlayerRespawned;
+    public static event Action<float> OnHealthChanged;  // normalized 0-1
+
+    // Score/Progress events
+    public static event Action<int> OnScoreChanged;
+    public static event Action OnLevelComplete;
+    public static event Action<int> OnLevelStarted;  // level index
+
+    // UI events
+    public static event Action<string> OnShowPopup;
+
+    // Raise methods (encapsulation)
+    public static void GameStarted() => OnGameStarted?.Invoke();
+    public static void GamePaused() => OnGamePaused?.Invoke();
+    public static void GameResumed() => OnGameResumed?.Invoke();
+    public static void GameOver() => OnGameOver?.Invoke();
+
+    public static void PlayerDied() => OnPlayerDied?.Invoke();
+    public static void PlayerRespawned() => OnPlayerRespawned?.Invoke();
+    public static void HealthChanged(float normalizedHealth) => OnHealthChanged?.Invoke(normalizedHealth);
+
+    public static void ScoreChanged(int score) => OnScoreChanged?.Invoke(score);
+    public static void LevelComplete() => OnLevelComplete?.Invoke();
+    public static void LevelStarted(int levelIndex) => OnLevelStarted?.Invoke(levelIndex);
+
+    public static void ShowPopup(string message) => OnShowPopup?.Invoke(message);
+
+    /// <summary>
+    /// Reset all events - Domain Reload 대응
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    public static void ResetAll()
+    {
+        OnGameStarted = null;
+        OnGamePaused = null;
+        OnGameResumed = null;
+        OnGameOver = null;
+        OnPlayerDied = null;
+        OnPlayerRespawned = null;
+        OnHealthChanged = null;
+        OnScoreChanged = null;
+        OnLevelComplete = null;
+        OnLevelStarted = null;
+        OnShowPopup = null;
+    }
+}
+```
+
+### 사용 예
+```csharp
+// ===== Publisher (이벤트 발행) =====
+public class Player : MonoBehaviour
+{
+    void Die()
+    {
+        GameEvents.PlayerDied();  // 한 줄로 끝
+    }
+
+    void TakeDamage(float damage)
+    {
+        currentHealth -= damage;
+        GameEvents.HealthChanged(currentHealth / maxHealth);
+
+        if (currentHealth <= 0)
+            Die();
+    }
+}
+
+// ===== Subscriber (이벤트 구독) =====
+public class GameOverUI : MonoBehaviour
+{
+    [SerializeField] private GameObject gameOverPanel;
+
+    void OnEnable()
+    {
+        GameEvents.OnPlayerDied += ShowGameOver;
+    }
+
+    void OnDisable()
+    {
+        GameEvents.OnPlayerDied -= ShowGameOver;  // 반드시 해제!
+    }
+
+    private void ShowGameOver()
+    {
+        gameOverPanel.SetActive(true);
+    }
+}
+
+// ===== 멀티 구독 예 (AudioManager) =====
+public class AudioManager : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnPlayerDied += PlayDeathSound;
+        GameEvents.OnLevelComplete += PlayVictorySound;
+        GameEvents.OnScoreChanged += _ => PlaySound("Score");
+    }
+
+    void OnDisable()
+    {
+        GameEvents.OnPlayerDied -= PlayDeathSound;
+        GameEvents.OnLevelComplete -= PlayVictorySound;
+    }
+
+    private void PlayDeathSound() => PlaySound("Death");
+    private void PlayVictorySound() => PlaySound("Victory");
+}
+```
+
+### System+Manager vs GameEvents
+
+| 용도 | 권장 패턴 |
+|------|----------|
+| 오브젝트 생명주기 (Spawn/Despawn) | System + Manager |
+| 상태 변화 알림 (Score, Health) | GameEvents |
+| 양방향 통신 | System + Manager |
+| 단방향 브로드캐스트 | GameEvents |
+
+> **Note**: 둘 다 같이 사용해도 됨. System+Manager는 "관리", GameEvents는 "알림" 용도로 구분.
 
 ---
 

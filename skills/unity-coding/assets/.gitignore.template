@@ -1,0 +1,71 @@
+# Unity .gitignore Template
+# Copy to your Unity project root
+
+# Unity generated
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# MemoryCaptures (Unity 2019.3+)
+/[Mm]emoryCaptures/
+
+# Recordings (Unity 2020+)
+/[Rr]ecordings/
+
+# Asset Store tools
+/[Aa]sset[Ss]tore[Tt]ools*/
+
+# Auto-generated VS/Rider solution
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity3D generated meta files
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Builds
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Crashlytics
+crashlytics-build.properties
+
+# Packed Addressables
+/[Aa]ddressables/
+
+# Rider/JetBrains
+.idea/
+*.DotSettings*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keystore (keep out of version control!)
+*.keystore
+*.jks
+
+# Local testing
+/[Tt]est[Rr]esults/
+
+# Packages lock
+packages-lock.json

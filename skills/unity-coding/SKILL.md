@@ -6,7 +6,7 @@ description: >
   모바일 빌드 사이즈 최적화(ASTC, Strip, Managed Stripping) 포함.
   사용 시점 - (1) 하이퍼캐주얼 게임 개발, (2) 빠른 프로토타입 제작,
   (3) 모바일 성능/빌드 사이즈 최적화, (4) CPI 테스트용 게임 제작,
-  (5) Unity, hypercasual, 하이퍼캐주얼, 프로토타입, CPI 키워드 언급 시
+  (5) Unity, hypercasual, 하이퍼캐주얼, 프로토타입, CPI, mobile game, prototype 키워드 언급 시
 ---
 
 # Unity Coding (Hypercasual)
@@ -61,9 +61,14 @@ Assets/__GameName/
 | 상황 | 참조 파일 |
 |------|----------|
 | 새 System/Manager 구현 | [architecture.md](references/architecture.md) |
+| 이벤트 통신 패턴 | [architecture.md#gameevents](references/architecture.md) |
+| 광고 (IAA), 인앱 구매 (IAP) | [monetization.md](references/monetization.md) |
+| CI/CD 빌드 자동화 | [build-automation.md](references/build-automation.md) |
 | 성능 문제, GC 스파이크 | [performance.md](references/performance.md) |
+| FPS/메모리 모니터링 | [performance.md#runtime-debug-tools](references/performance.md) |
 | 빌드 사이즈 줄이기 | [build-optimization.md](references/build-optimization.md) |
 | 코드 리뷰 체크리스트 | [anti-patterns.md](references/anti-patterns.md) |
+| Unity null 체크, Input System | [anti-patterns.md#unity-object-null-체크](references/anti-patterns.md) |
 
 ### Advanced Patterns (프로젝트 성장 시)
 | 상황 | 참조 |

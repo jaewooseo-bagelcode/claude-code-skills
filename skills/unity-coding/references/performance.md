@@ -8,6 +8,8 @@ GC-free 패턴, Object Pooling, Physics/UI 최적화.
 3. [Physics 최적화](#physics-최적화)
 4. [UI 최적화](#ui-최적화)
 5. [Profiling](#profiling)
+6. [Runtime Debug Tools](#runtime-debug-tools)
+7. [UpdateManager](#updatemanager-centralized-update)
 
 ---
 
@@ -333,3 +335,136 @@ public class GameSystem : MonoBehaviour
     }
 }
 ```
+
+---
+
+## Runtime Debug Tools
+
+Profiler 윈도우 없이 디바이스에서 즉시 성능 확인.
+
+### FPSCounter
+```csharp
+using UnityEngine;
+using System.Text;
+
+public class FPSCounter : MonoBehaviour
+{
+    private float _deltaTime;
+    private StringBuilder _sb = new(16);
+
+    void Update()
+    {
+        _deltaTime += (Time.deltaTime - _deltaTime) * 0.1f;
+    }
+
+    void OnGUI()
+    {
+        float fps = 1f / _deltaTime;
+
+        // 색상 코딩: green >= 58, yellow >= 28, red < 28
+        GUI.color = fps >= 58 ? Color.green : fps >= 28 ? Color.yellow : Color.red;
+
+        _sb.Clear();
+        _sb.Append((int)fps).Append(" FPS");
+        GUI.Label(new Rect(10, 10, 100, 30), _sb.ToString());
+    }
+}
+```
+
+### MemoryProfiler
+```csharp
+using UnityEngine;
+using UnityEngine.Profiling;
+
+public class MemoryProfiler : MonoBehaviour
+{
+    void OnGUI()
+    {
+        float total = Profiler.GetTotalAllocatedMemoryLong() / 1048576f;
+        float reserved = Profiler.GetTotalReservedMemoryLong() / 1048576f;
+        float gc = System.GC.GetTotalMemory(false) / 1048576f;
+
+        GUILayout.BeginArea(new Rect(10, 50, 300, 100));
+        GUILayout.Label($"Total: {total:F1}MB");
+        GUILayout.Label($"Reserved: {reserved:F1}MB");
+        GUILayout.Label($"GC: {gc:F1}MB");
+        GUILayout.EndArea();
+    }
+
+    [ContextMenu("Log Memory Snapshot")]
+    public void LogSnapshot()
+    {
+        Debug.Log($"[Memory] Total: {Profiler.GetTotalAllocatedMemoryLong() / 1048576f:F1}MB, " +
+                  $"Mono: {Profiler.GetMonoUsedSizeLong() / 1048576f:F1}MB");
+    }
+}
+```
+
+> **Tip**: 두 컴포넌트를 빈 GameObject에 추가하면 즉시 모니터링 가능.
+
+---
+
+## UpdateManager (Centralized Update)
+
+100+ 오브젝트가 개별 Update() 호출하면 C++ 마샬링 오버헤드 발생. 중앙 디스패처로 최적화.
+
+### IUpdatable 인터페이스
+```csharp
+public interface IUpdatable
+{
+    void OnUpdate(float deltaTime);
+}
+```
+
+### UpdateManager
+```csharp
+using UnityEngine;
+using System.Collections.Generic;
+
+public class UpdateManager : Singleton<UpdateManager>
+{
+    private readonly List<IUpdatable> _updates = new(256);
+
+    public void Register(IUpdatable u)
+    {
+        if (!_updates.Contains(u))
+            _updates.Add(u);
+    }
+
+    public void Unregister(IUpdatable u) => _updates.Remove(u);
+
+    void Update()
+    {
+        float dt = Time.deltaTime;
+        // 역순 순회: 중간 제거 안전
+        for (int i = _updates.Count - 1; i >= 0; i--)
+            _updates[i].OnUpdate(dt);
+    }
+
+    public int Count => _updates.Count;
+}
+```
+
+### 사용 예
+```csharp
+public class Enemy : MonoBehaviour, IUpdatable
+{
+    void OnEnable() => UpdateManager.Instance?.Register(this);
+    void OnDisable() => UpdateManager.Instance?.Unregister(this);
+
+    public void OnUpdate(float dt)
+    {
+        // Update 대신 여기서 로직 실행
+        transform.Translate(Vector3.forward * dt);
+    }
+}
+```
+
+### 언제 사용?
+| 상황 | 권장 |
+|------|------|
+| 오브젝트 < 50개 | 일반 Update() OK |
+| 오브젝트 50-100개 | 선택적 |
+| 오브젝트 100+개 | UpdateManager 권장 |
+
+> **Note**: 단순 프로토타입에서는 일반 Update도 충분. 성능 이슈 발생 시 도입.
