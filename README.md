@@ -1,12 +1,19 @@
 # Claude Code Skills
 
-Collection of professional AI agent skills for Claude Code, powered by GPT-5.2-Codex.
+Professional AI agent skills for Claude Code.
 
-## Quick Start: Using acodex Agent
+## Available Skills
 
-The `acodex` agent orchestrates Codex skills for code review and implementation. It prepares context, manages sessions, and summarizes results.
+| Skill | Description | Type |
+|-------|-------------|------|
+| [codex-review](skills/codex-review/) | Code review & security analysis using GPT-5.2-Codex | READ-ONLY |
+| [codex-task-executor](skills/codex-task-executor/) | Coding task execution using GPT-5.2-Codex | WRITE |
+| [unity-coding](skills/unity-coding/) | Unity hypercasual game development patterns | Guide |
+| [pencil-to-code](skills/pencil-to-code/) | Pencil design to React/TypeScript conversion | Guide |
 
-### Foreground Execution (Blocking)
+## Quick Start
+
+### Using acodex Agent
 
 ```
 # Code review
@@ -14,228 +21,124 @@ The `acodex` agent orchestrates Codex skills for code review and implementation.
 
 # Implementation
 "Use acodex to implement the login feature from the plan"
-```
 
-Claude delegates to acodex, which runs in the foreground. You'll see progress and can interact with questions.
-
-### Background Execution (Concurrent)
-
-```
-# Run in background while you continue working
+# Background execution
 "Use acodex in the background to review the authentication module"
-
-# Or press Ctrl+B while a task is running to background it
 ```
-
-Background agents run concurrently. Claude notifies you when complete.
 
 ### Direct Skill Invocation
 
-Skip the acodex orchestrator and invoke skills directly:
-
 ```
-# Code review
 /codex-review
-
-# Implementation
 /codex-task-executor
+/unity-coding
+/pencil-to-code
 ```
-
-**Comparison:**
-
-| Method | Overhead | Best For |
-|--------|----------|----------|
-| acodex agent | Haiku model cost | Complex workflows, multiple files, context preparation |
-| Direct skill | None | Simple reviews, when you provide complete context |
-
-Both execute the same Go binaries internally.
-
-## Available Skills
-
-### codex-review
-
-Professional code review and analysis using GPT-5.2-Codex (READ-ONLY).
-
-**Features**:
-- Security analysis (SQL injection, XSS, auth bypass)
-- Bug detection (logic errors, null references, edge cases)
-- Performance review (N+1 queries, algorithm efficiency)
-- Code quality (SOLID principles, anti-patterns)
-- Refactoring suggestions
-
-**Tech**: Go implementation, 9.5/10 security, 5.7MB binary
-
-[View Details](skills/codex-review/SKILL.md)
-
-### codex-task-executor
-
-Execute coding tasks using GPT-5.2-Codex (WRITES CODE).
-
-**Features**:
-- Implements features from plans
-- Creates and modifies files
-- Multi-turn conversations with progress markers
-- Works from Claude Code's task specifications
-- Full Write/Edit/Read/Grep/Glob tools
-
-**Tech**: Go implementation, 9.5/10 security, 8.3MB binary
-
-[View Details](skills/codex-task-executor/SKILL.md)
-
-## acodex Agent Configuration
-
-The `acodex` agent is defined in `agents/acodex.md`:
-
-```yaml
----
-name: acodex
-description: Codex orchestrator for deep code review and implementation using GPT-5.2-Codex.
-tools: Bash, Read, Glob, Grep
-skills:
-  - codex-review
-  - codex-task-executor
-model: haiku
----
-```
-
-**Key features:**
-- Uses Haiku model for cost-efficient orchestration
-- Preloads codex-review and codex-task-executor skills
-- Generates session names using plan file pattern (adjective-verb-noun)
-- Manages session continuity for follow-up questions
-
-**Session naming examples:**
-- `security-reviewing-turing`
-- `auth-implementing-lovelace`
-- `performance-auditing-knuth`
 
 ## Installation
 
-### Method 1: OpenSkills (Recommended)
+### OpenSkills (Recommended)
 
 ```bash
 # Install all skills
 npx openskills install jaewooseo-bagelcode/claude-code-skills
 npx openskills sync
 
-# Or install to global (~/.claude/skills/)
-npx openskills install jaewooseo-bagelcode/claude-code-skills --global
-npx openskills sync
-```
-
-**Individual skills**:
-```bash
-# Install specific skill only
+# Install specific skill
 npx openskills install jaewooseo-bagelcode/claude-code-skills/skills/codex-review
-npx openskills sync
 ```
 
-**Update skills**:
-```bash
-# Update all
-npx openskills update
-
-# Update specific skills
-npx openskills update codex-review,codex-task-executor
-```
-
-### Method 2: Manual Git Clone
+### Manual
 
 ```bash
-# Global installation
-git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git ~/.claude-skills-repo
-ln -s ~/.claude-skills-repo/skills/* ~/.claude/skills/
-ln -s ~/.claude-skills-repo/agents/* ~/.claude/agents/
-
-# Project-local installation
 git clone https://github.com/jaewooseo-bagelcode/claude-code-skills.git
-ln -s $(pwd)/claude-code-skills/skills/* .claude/skills/
-ln -s $(pwd)/claude-code-skills/agents/* .claude/agents/
+ln -s $(pwd)/claude-code-skills/skills/* ~/.claude/skills/
 ```
+
+## Skills Overview
+
+### codex-review
+
+Professional code review using GPT-5.2-Codex (READ-ONLY).
+
+- Security analysis (SQL injection, XSS, auth bypass)
+- Bug detection (logic errors, null references)
+- Performance review (N+1 queries, algorithm efficiency)
+- Code quality (SOLID principles, anti-patterns)
+
+**Tech**: Go binary, 9.5/10 security score
+
+### codex-task-executor
+
+Execute coding tasks using GPT-5.2-Codex (WRITES CODE).
+
+- Implements features from plans
+- Creates and modifies files
+- Multi-turn conversations with progress markers
+- Full Write/Edit/Read/Grep/Glob tools
+
+**Tech**: Go binary, 9.5/10 security score
+
+### unity-coding
+
+Unity hypercasual game development patterns.
+
+- System + Manager 패턴 (DI 프레임워크 없이)
+- ObjectSystem 기반 풀링
+- GC-free Update 패턴
+- 모바일 빌드 최적화 (< 80MB CPI 테스트)
+- Advanced: MonoBase, Component Pool, Async FSM
+
+### pencil-to-code
+
+Pencil design to React/TypeScript conversion.
+
+- CSS variable → hex 변환
+- Pixel-perfect spacing (Tailwind 근사 없음)
+- Fixed height 정렬 패턴
+- Complete property mapping table
+- 17가지 트러블슈팅 가이드
 
 ## Requirements
 
-**All skills require**:
+**Codex skills require**:
 - `OPENAI_API_KEY` environment variable
+- macOS Apple Silicon (pre-built) or build from source
 
-**Platform support**:
-- macOS Apple Silicon (pre-built binaries included)
-- Linux, Windows (build from source - see appendix/BUILD.md in each skill)
-
-**Optional environment variables**:
+**Optional**:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENAI_MODEL` | `gpt-5.2-codex` | Model name |
-| `REASONING_EFFORT` | `high` (review) / `medium` (executor) | low/medium/high/xhigh |
+| `REASONING_EFFORT` | `high` / `medium` | low/medium/high/xhigh |
 | `MAX_ITERS` | `50` | Max tool iterations |
 
 ## Project Structure
 
 ```
 claude-code-skills/
-├── agents/               # Custom agent definitions
-│   └── acodex.md         # Codex orchestrator agent
-├── skills/               # Installable skills
-│   ├── codex-review/
-│   │   ├── SKILL.md
-│   │   ├── bin/          # Pre-built binaries
-│   │   ├── scripts/      # Go source code
-│   │   └── references/   # Additional documentation
-│   └── codex-task-executor/
-│       ├── SKILL.md
-│       ├── bin/
-│       ├── scripts/
-│       └── references/
-├── .claude/              # Development tools
-│   └── skills/
-│       └── skill-creator/
-└── README.md
+├── skills/
+│   ├── codex-review/          # Go-based code review
+│   ├── codex-task-executor/   # Go-based task execution
+│   ├── unity-coding/          # Unity dev patterns
+│   └── pencil-to-code/        # Design-to-code conversion
+├── agents/
+│   └── acodex.md              # Codex orchestrator agent
+└── .claude/
+    └── skills/
+        └── skill-creator/     # Skill development tool
 ```
-
-## Skills Included
-
-| Skill | Description | Type | Status |
-|-------|-------------|------|--------|
-| [codex-review](skills/codex-review/) | Code review & analysis | READ-ONLY | Ready |
-| [codex-task-executor](skills/codex-task-executor/) | Coding task execution | WRITE | Ready |
-
-| Agent | Description | Model | Status |
-|-------|-------------|-------|--------|
-| [acodex](agents/acodex.md) | Codex orchestrator | Haiku | Ready |
 
 ## Development
 
-### Adding New Skills
-
 ```bash
-# Use skill-creator helper
-.claude/skills/skill-creator/scripts/init_skill.py my-new-skill --path ./skills/my-new-skill
+# Create new skill
+.claude/skills/skill-creator/scripts/init_skill.py my-skill --path ./skills/my-skill
 
-# Follow skill-creator guidelines
-# See .claude/skills/skill-creator/SKILL.md
+# Build Go binary
+cd skills/<skill>/scripts
+go build -ldflags="-s -w" -o ../bin/<name>-$(go env GOOS)-$(go env GOARCH)
 ```
-
-### Building Go Binaries
-
-```bash
-cd skills/<skill-name>/scripts
-go mod download
-go build -ldflags="-s -w" -o ../bin/<binary-name>-$(go env GOOS)-$(go env GOARCH)
-```
-
-See `appendix/BUILD.md` in each skill for platform-specific instructions.
-
-## Contributing
-
-1. Fork this repository
-2. Create your skill in `skills/your-skill-name/`
-3. Follow skill-creator guidelines
-4. Submit pull request
 
 ## License
 
 Each skill has its own license. See individual LICENSE files.
-
-## Credits
-
-Built for Claude Code agent framework.
