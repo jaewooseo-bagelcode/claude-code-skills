@@ -265,11 +265,14 @@ if (other.CompareTag("Enemy"))
 
 ### Physics Settings
 ```
-Project Settings > Physics:
-- Fixed Timestep: 0.02 → 0.03 (모바일)
+Project Settings > Physics/Time:
+- Fixed Timestep: 0.02 (기본값, 50fps 물리)
+  - 성능 이슈 시 0.03으로 조정 가능
 - Default Solver Iterations: 6 → 4
 - Layer Collision Matrix: 불필요한 충돌 비활성화
 ```
+
+> **Note**: Fixed Timestep 조정 시 물리 정확도와 성능 트레이드오프 고려.
 
 ---
 

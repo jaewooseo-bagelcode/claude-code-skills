@@ -16,9 +16,11 @@
 
 | 단계 | 목표 | 비고 |
 |------|------|------|
-| CPI 테스트 | < 80MB | 다운로드 전환율 최적화 |
-| 소프트런칭 | < 150MB | 기능 추가 허용 |
-| 글로벌 런칭 | < 200MB | 최대 허용치 |
+| CPI 테스트 | < 250MB | WiFi 없이 다운로드 가능 (iOS 기준) |
+| 소프트런칭 | < 300MB | 기능 추가 허용 |
+| 글로벌 런칭 | < 400MB | 최대 허용치 |
+
+> **Note**: 낮을수록 다운로드 전환율 유리. 250MB는 WiFi 없이 다운로드 가능한 임계치.
 
 ---
 
@@ -69,13 +71,16 @@ Optimization:
 ## Texture 압축
 
 ### 권장 설정
-| 타입 | Max Size | Format | Mip Maps |
-|------|----------|--------|----------|
-| 일반 텍스처 | 1024 | ASTC 6x6 | 3D만 |
-| UI 스프라이트 | 512 | ASTC 6x6 | Off |
-| Normal Map | 512 | ASTC 6x6 | On |
+| 타입 | Max Size | Format | Mip Maps | 비고 |
+|------|----------|--------|----------|------|
+| 일반 텍스처 | 2048 | ASTC 6x6 | 3D만 | 배칭/패킹 최적화에 유리 |
+| UI 스프라이트 | 1024 | ASTC 6x6 | Off | |
+| Normal Map | 1024 | ASTC 6x6 | On | |
+| 고품질 텍스처 | 4096 | ASTC 6x6 | On | 하이엔드 기기 타겟 |
 
 **공통**: Read/Write Enabled = false
+
+> **Note**: 큰 텍스처가 배칭/패킹 최적화에 유리. 아시아 시장 고려 시 2048 안정적, 하이엔드는 4096도 가능.
 
 ### Sprite Atlas
 ```
@@ -85,7 +90,7 @@ Settings:
 - Padding: 2
 
 Platform Override:
-- Max Texture Size: 2048
+- Max Texture Size: 4096 (또는 2048)
 - Format: ASTC 6x6
 ```
 
@@ -152,8 +157,8 @@ public class AssetOptimizer
 
             bool changed = false;
 
-            if (importer.maxTextureSize > 1024)
-            { importer.maxTextureSize = 1024; changed = true; }
+            if (importer.maxTextureSize > 2048)
+            { importer.maxTextureSize = 2048; changed = true; }
 
             if (importer.isReadable)
             { importer.isReadable = false; changed = true; }

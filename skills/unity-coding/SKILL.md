@@ -22,6 +22,8 @@ description: >
 | Instantiate/Destroy | ObjectSystem 풀링 |
 | LINQ, 문자열 연결 (Update) | for loop, StringBuilder |
 
+> **Note**: 아키텍처는 게임마다 다를 수 있음. 이 패턴은 1-2주 프로토타입 기준.
+
 ## Quick Reference
 
 ### System + Manager 패턴
@@ -39,11 +41,11 @@ description: >
 - **Physics**: NonAlloc 메서드 사용
 
 ### 빌드 목표
-| 단계 | 사이즈 |
-|------|--------|
-| CPI 테스트 | < 80MB |
-| 소프트런칭 | < 150MB |
-| 글로벌 런칭 | < 200MB |
+| 단계 | 사이즈 | 비고 |
+|------|--------|------|
+| CPI 테스트 | < 250MB | WiFi 없이 다운로드 가능 |
+| 소프트런칭 | < 300MB | 기능 추가 허용 |
+| 글로벌 런칭 | < 400MB | 최대 허용치 |
 
 ### 폴더 구조
 ```
