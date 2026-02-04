@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const apiBase = "https://api.openai.com/v1"
@@ -39,7 +38,7 @@ func createConversation(apiKey, systemPrompt string) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{} // No timeout - wait for OpenAI server response
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -244,7 +243,7 @@ func executeTask(apiKey, model, reasoningEffort, conversationID, taskID, taskDes
 			"conversation":         conversationID,
 			"tools":                tools,
 			"tool_choice":          "auto",
-			"parallel_tool_calls":  false,
+			"parallel_tool_calls":  true,
 			"input":                inputItems,
 		}
 
@@ -336,7 +335,7 @@ func callResponsesAPI(ctx context.Context, apiKey string, payload map[string]int
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{} // No timeout - wait for OpenAI server response
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
