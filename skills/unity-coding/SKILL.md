@@ -61,7 +61,7 @@ Assets/__GameName/
 | 상황 | 참조 파일 |
 |------|----------|
 | 새 System/Manager 구현 | [architecture.md](references/architecture.md) |
-| 이벤트 통신 패턴 | [architecture.md#gameevents](references/architecture.md) |
+| 이벤트 통신 패턴 | [architecture-events.md](references/architecture-events.md) |
 | 광고 (IAA), 인앱 구매 (IAP) | [monetization.md](references/monetization.md) |
 | CI/CD 빌드 자동화 | [build-automation.md](references/build-automation.md) |
 | 성능 문제, GC 스파이크 | [performance.md](references/performance.md) |
@@ -73,9 +73,9 @@ Assets/__GameName/
 ### Advanced Patterns (프로젝트 성장 시)
 | 상황 | 참조 |
 |------|------|
-| Rx/async 구독 자동 정리 | [architecture.md#advanced-monobase](references/architecture.md) |
-| 인스펙터 기반 풀 설정 | [architecture.md#advanced-component-pool](references/architecture.md) |
-| 복잡한 게임 플로우 | [architecture.md#advanced-async-fsm](references/architecture.md) |
-| IDisposable 기반 구독 관리 | [architecture.md#advanced-disposable-system](references/architecture.md) |
-| Update 구독 패턴 (EventNotifier) | [architecture.md#advanced-eventnotifier](references/architecture.md) |
-| 타입 기반 이벤트 (GameEventManager) | [architecture.md#advanced-gameeventmanager](references/architecture.md) |
+| Rx/async 구독 자동 정리 | [architecture-advanced.md#monobase](references/architecture-advanced.md) |
+| 인스펙터 기반 풀 설정 | [architecture-advanced.md#component-pool](references/architecture-advanced.md) |
+| 복잡한 게임 플로우 | [architecture-advanced.md#async-fsm](references/architecture-advanced.md) |
+| IDisposable 기반 구독 관리 | [architecture-advanced.md#disposable-system](references/architecture-advanced.md) |
+| Update 구독 패턴 (EventNotifier) | [architecture-advanced.md#eventnotifier](references/architecture-advanced.md) |
+| 타입 기반 이벤트 (GameEventManager) | [architecture-events.md#advanced-gameeventmanager](references/architecture-events.md) |
