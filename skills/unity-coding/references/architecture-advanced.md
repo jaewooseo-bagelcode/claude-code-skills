@@ -1,6 +1,6 @@
 # Advanced Patterns
 
-프로젝트 성장 시 사용하는 고급 패턴: MonoBase, Component Pool, Async FSM, Disposable System, EventNotifier.
+프로젝트 성장 시 사용하는 고급 패턴: MonoBase, Component Pool, Async FSM, Disposable System, EventNotifier, Effect Pool.
 
 ## Table of Contents
 1. [MonoBase](#monobase) - IDisposable 자동 관리
@@ -8,6 +8,7 @@
 3. [Async FSM](#async-fsm) - UniTask 기반 상태 머신
 4. [Disposable System](#disposable-system) - 구독 자동 정리
 5. [EventNotifier](#eventnotifier) - Update 구독 패턴
+6. [Effect Pool](#effect-pool) - VFX/파티클 특화 풀링
 
 ---
 
@@ -547,3 +548,103 @@ public class AdManager : IManager
 ```
 
 > **UpdateManager vs EventNotifier**: UpdateManager는 IUpdatable 인터페이스 기반, EventNotifier는 IDisposable 기반. EventNotifier가 구독 해제 실수를 방지하는 데 더 안전.
+
+---
+
+## Effect Pool
+
+VFX/파티클 이펙트 전용 풀링. `OnParticleSystemStopped` 콜백으로 자동 반환.
+
+### PooledEffector (파티클 자동 반환)
+```csharp
+[RequireComponent(typeof(PooledObject))]
+public class PooledEffector : MonoBehaviour
+{
+    [SerializeField] private PooledObject _pooledObject;
+    [SerializeField] private Transform _anchor;
+
+    // ParticleSystem의 Stop Action을 "Callback"으로 설정 시 자동 호출
+    private void OnParticleSystemStopped()
+    {
+        _pooledObject?.ReturnToPool();
+    }
+
+    public void SetPosition(Vector3 position) => transform.position = position;
+    public void SetRotation(Quaternion rotation) => _anchor.rotation = rotation;
+    public void SetScale(Vector3 scale) => _anchor.localScale = scale;
+
+    private void OnValidate()
+    {
+        if (_pooledObject == null) _pooledObject = GetComponent<PooledObject>();
+        if (_anchor == null) _anchor = transform;
+    }
+}
+```
+
+> **ParticleSystem 설정**: Inspector → Stop Action → **Callback** 선택 필수
+
+### PooledFollowEffect (타겟 추적)
+```csharp
+public class PooledFollowEffect : MonoBehaviour
+{
+    [SerializeField] private PooledObject _pooledObject;
+    private Transform _target;
+    private Vector3 _lastPosition;
+
+    public void SetTarget(Transform target)
+    {
+        if (target == null)
+        {
+            _pooledObject.ReturnToPool();
+            return;
+        }
+        _target = target;
+        _lastPosition = target.position;
+    }
+
+    private void Update()
+    {
+        if (_target != null)
+            _lastPosition = _target.position;
+
+        transform.position = _lastPosition;  // 타겟 파괴 후에도 마지막 위치 유지
+    }
+
+    private void OnParticleSystemStopped()
+    {
+        _target = null;
+        _pooledObject?.ReturnToPool();
+    }
+}
+```
+
+### 사용 예
+```csharp
+// 기본 이펙트 (위치 고정)
+public void SpawnHitEffect(Vector3 position)
+{
+    var obj = _hitEffectPool.Get();
+    var effector = obj.GetComponent<PooledEffector>();
+    effector.SetPosition(position);
+    // ParticleSystem 종료 시 자동 반환
+}
+
+// 추적 이펙트 (버프, 데미지 숫자 등)
+public void SpawnBuffEffect(Transform target)
+{
+    var obj = _buffEffectPool.Get();
+    var follow = obj.GetComponent<PooledFollowEffect>();
+    follow.SetTarget(target);
+    // 타겟을 따라다니다가 파티클 종료 시 자동 반환
+}
+```
+
+### Component Pool vs Effect Pool
+
+| 용도 | 권장 패턴 |
+|------|----------|
+| 탄환, 적, 아이템 | Component Pool |
+| 파티클/VFX 이펙트 | Effect Pool |
+| 타겟 추적 이펙트 | PooledFollowEffect |
+
+> **Note**: Effect Pool은 Component Pool 위에 VFX 특화 기능을 추가한 것. 기본 PooledObject는 동일하게 사용.

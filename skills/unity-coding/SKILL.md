@@ -79,3 +79,4 @@ Assets/__GameName/
 | IDisposable 기반 구독 관리 | [architecture-advanced.md#disposable-system](references/architecture-advanced.md) |
 | Update 구독 패턴 (EventNotifier) | [architecture-advanced.md#eventnotifier](references/architecture-advanced.md) |
 | 타입 기반 이벤트 (GameEventManager) | [architecture-events.md#advanced-gameeventmanager](references/architecture-events.md) |
+| VFX/파티클 풀링 (Effect Pool) | [architecture-advanced.md#effect-pool](references/architecture-advanced.md) |
