@@ -11,6 +11,9 @@ System + Manager 패턴, Singleton, GameManager 구조, 이벤트 통신, 고급
 6. [Advanced: MonoBase](#advanced-monobase) - IDisposable 자동 관리
 7. [Advanced: Component Pool](#advanced-component-pool) - 컴포넌트 기반 풀링
 8. [Advanced: Async FSM](#advanced-async-fsm) - UniTask 기반 상태 머신
+9. [Advanced: Disposable System](#advanced-disposable-system) - 구독 자동 정리
+10. [Advanced: EventNotifier](#advanced-eventnotifier) - Update 구독 패턴
+11. [Advanced: GameEventManager](#advanced-gameeventmanager) - 타입 기반 이벤트
 
 ---
 
@@ -121,6 +124,13 @@ public interface IManager
     bool IsInit { get; }
     void Init();
     void Clear();
+}
+
+// 확장 인터페이스: 생명주기 콜백 (선택적)
+public interface IManagerLifecycle : IManager
+{
+    void OnAwake();    // Globals.Awake에서 호출
+    void OnDestroy();  // Globals.OnDestroy에서 호출
 }
 ```
 
@@ -858,3 +868,457 @@ public class PlayState : State<GameFSM>
     }
 }
 ```
+
+---
+
+## Advanced: Disposable System
+
+IDisposable 기반 구독 관리. 이벤트 누수 방지 및 자동 정리.
+
+### DisposableAction
+```csharp
+using System;
+
+public class DisposableAction : IDisposable
+{
+    private Action _onDispose;
+
+    public static IDisposable Create(Action onDispose) => new DisposableAction(onDispose);
+
+    private DisposableAction(Action onDispose) => _onDispose = onDispose;
+
+    public void Dispose()
+    {
+        _onDispose?.Invoke();
+        _onDispose = null;
+    }
+}
+```
+
+### CompositeDisposable
+```csharp
+using System;
+using System.Collections.Generic;
+
+public class CompositeDisposable : IDisposable
+{
+    private readonly List<IDisposable> _disposables = new();
+
+    public void Add(IDisposable disposable) => _disposables.Add(disposable);
+
+    public void Clear()
+    {
+        foreach (var d in _disposables)
+            d?.Dispose();
+        _disposables.Clear();
+    }
+
+    public void Dispose() => Clear();
+}
+
+public static class DisposableExtensions
+{
+    public static void AddTo(this IDisposable disposable, CompositeDisposable composite)
+    {
+        composite.Add(disposable);
+    }
+}
+```
+
+### 사용 예
+```csharp
+public class EnemyController : MonoBehaviour
+{
+    private CompositeDisposable _disposables = new();
+
+    void OnEnable()
+    {
+        // 이벤트 구독을 IDisposable로 래핑
+        GameEvents.OnGamePaused += OnPause;
+        DisposableAction.Create(() => GameEvents.OnGamePaused -= OnPause)
+            .AddTo(_disposables);
+    }
+
+    void OnDisable()
+    {
+        _disposables.Clear();  // 모든 구독 자동 해제
+    }
+}
+```
+
+---
+
+## Advanced: EventNotifier
+
+IDisposable 반환하는 이벤트 발행/구독 시스템. Update 중앙화에 적합.
+
+### IEventSubscriber 인터페이스
+```csharp
+using System;
+
+public interface IEventSubscriber
+{
+    IDisposable Subscribe(Action action);
+}
+
+public interface IEventSubscriber<T>
+{
+    IDisposable Subscribe(Action<T> action);
+}
+```
+
+### EventNotifier 구현
+```csharp
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class EventNotifier : IEventSubscriber, IDisposable
+{
+    private readonly List<Action> _actions = new();
+    private readonly List<Action> _temp = new();
+
+    public IDisposable Subscribe(Action action)
+    {
+        if (action == null) throw new ArgumentNullException(nameof(action));
+        _actions.Add(action);
+        return DisposableAction.Create(() => _actions.Remove(action));
+    }
+
+    public void Dispatch()
+    {
+        _temp.Clear();
+        _temp.AddRange(_actions);
+        foreach (var action in _temp)
+        {
+            try { action?.Invoke(); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+    }
+
+    public void Dispose() => _actions.Clear();
+}
+
+public class EventNotifier<T> : IEventSubscriber<T>, IDisposable
+{
+    private readonly List<Action<T>> _actions = new();
+    private readonly List<Action<T>> _temp = new();
+
+    public IDisposable Subscribe(Action<T> action)
+    {
+        if (action == null) throw new ArgumentNullException(nameof(action));
+        _actions.Add(action);
+        return DisposableAction.Create(() => _actions.Remove(action));
+    }
+
+    public void Dispatch(T value)
+    {
+        _temp.Clear();
+        _temp.AddRange(_actions);
+        foreach (var action in _temp)
+        {
+            try { action?.Invoke(value); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+    }
+
+    public void Dispose() => _actions.Clear();
+}
+```
+
+### Update 구독 패턴 (GameSystem 확장)
+```csharp
+public class GameSystem : Singleton<GameSystem>
+{
+    // Update 구독자
+    private readonly EventNotifier _onUpdate = new();
+    private readonly EventNotifier _onLateUpdate = new();
+    private readonly EventNotifier<bool> _onApplicationPause = new();
+
+    public static IEventSubscriber SubUpdate => Instance._onUpdate;
+    public static IEventSubscriber SubLateUpdate => Instance._onLateUpdate;
+    public static IEventSubscriber<bool> SubOnPause => Instance._onApplicationPause;
+
+    void Update() => _onUpdate.Dispatch();
+    void LateUpdate() => _onLateUpdate.Dispatch();
+    void OnApplicationPause(bool pause) => _onApplicationPause.Dispatch(pause);
+
+    protected override void OnDestroy()
+    {
+        base.OnDestroy();
+        _onUpdate.Dispose();
+        _onLateUpdate.Dispose();
+        _onApplicationPause.Dispose();
+    }
+}
+```
+
+### Manager에서 Update 구독
+```csharp
+public class AdManager : IManager
+{
+    private IDisposable _updateSub;
+    private CompositeDisposable _disposables = new();
+
+    public void Init()
+    {
+        // Update 구독 (IDisposable 반환)
+        _updateSub = GameSystem.SubUpdate.Subscribe(OnUpdate);
+
+        // 또는 CompositeDisposable 사용
+        GameSystem.SubLateUpdate.Subscribe(OnLateUpdate).AddTo(_disposables);
+    }
+
+    public void Clear()
+    {
+        _updateSub?.Dispose();
+        _disposables.Clear();
+    }
+
+    private void OnUpdate() { /* 매 프레임 로직 */ }
+    private void OnLateUpdate() { /* LateUpdate 로직 */ }
+}
+```
+
+> **UpdateManager vs EventNotifier**: UpdateManager는 IUpdatable 인터페이스 기반, EventNotifier는 IDisposable 기반. EventNotifier가 구독 해제 실수를 방지하는 데 더 안전.
+
+---
+
+## Advanced: GameEventManager
+
+타입 기반 이벤트 시스템. 이벤트를 클래스로 정의하여 데이터 전달 및 재사용.
+
+### IGameEvent 인터페이스
+```csharp
+public interface IGameEvent { }
+```
+
+### GameEventDispatcher
+```csharp
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class GameEventDispatcher<T> where T : IGameEvent
+{
+    private readonly HashSet<Action<T>> _checker = new();
+    private readonly List<Action<T>> _handlers = new();
+    private readonly List<Action<T>> _temp = new();
+
+    public void Subscribe(Action<T> handler)
+    {
+        if (handler == null) return;
+        if (_checker.Add(handler))
+            _handlers.Add(handler);
+    }
+
+    public void Unsubscribe(Action<T> handler)
+    {
+        if (handler == null) return;
+        if (_checker.Remove(handler))
+            _handlers.Remove(handler);
+    }
+
+    public void Dispatch(T evt)
+    {
+        _temp.Clear();
+        _temp.AddRange(_handlers);
+        foreach (var handler in _temp)
+        {
+            try { handler(evt); }
+            catch (Exception e) { Debug.LogError($"[{typeof(T).Name}] {e}"); }
+        }
+    }
+
+    public void Clear()
+    {
+        _handlers.Clear();
+        _checker.Clear();
+    }
+}
+```
+
+### GameEventManager
+```csharp
+using System;
+using System.Collections.Generic;
+
+public class GameEventManager : IManager
+{
+    private readonly Dictionary<Type, object> _dispatchers = new();
+
+    public bool IsInit { get; private set; }
+
+    public void Init() => IsInit = true;
+
+    public void Clear()
+    {
+        foreach (var dispatcher in _dispatchers.Values)
+        {
+            var method = dispatcher.GetType().GetMethod("Clear");
+            method?.Invoke(dispatcher, null);
+        }
+        _dispatchers.Clear();
+        IsInit = false;
+    }
+
+    public void Subscribe<T>(Action<T> handler) where T : IGameEvent
+    {
+        var dispatcher = GetOrCreateDispatcher<T>();
+        dispatcher.Subscribe(handler);
+    }
+
+    public void Unsubscribe<T>(Action<T> handler) where T : IGameEvent
+    {
+        if (_dispatchers.TryGetValue(typeof(T), out var obj))
+        {
+            var dispatcher = (GameEventDispatcher<T>)obj;
+            dispatcher.Unsubscribe(handler);
+        }
+    }
+
+    public void Publish<T>(T evt) where T : IGameEvent
+    {
+        if (_dispatchers.TryGetValue(typeof(T), out var obj))
+        {
+            var dispatcher = (GameEventDispatcher<T>)obj;
+            dispatcher.Dispatch(evt);
+        }
+    }
+
+    private GameEventDispatcher<T> GetOrCreateDispatcher<T>() where T : IGameEvent
+    {
+        var type = typeof(T);
+        if (!_dispatchers.TryGetValue(type, out var obj))
+        {
+            obj = new GameEventDispatcher<T>();
+            _dispatchers[type] = obj;
+        }
+        return (GameEventDispatcher<T>)obj;
+    }
+}
+```
+
+### GameEventSystem (Static API)
+```csharp
+public static class GameEventSystem
+{
+    private static GameEventManager Manager => GameEventManager.Instance;
+
+    public static void Subscribe<T>(Action<T> handler) where T : IGameEvent
+        => Manager?.Subscribe(handler);
+
+    public static void Unsubscribe<T>(Action<T> handler) where T : IGameEvent
+        => Manager?.Unsubscribe(handler);
+
+    public static void Publish<T>(T evt) where T : IGameEvent
+        => Manager?.Publish(evt);
+}
+```
+
+### 이벤트 정의 예
+```csharp
+// 이벤트 클래스 정의
+public class PlayerDamagedEvent : IGameEvent
+{
+    public float Damage { get; set; }
+    public float CurrentHealth { get; set; }
+    public Vector3 HitPoint { get; set; }
+}
+
+public class ScoreChangedEvent : IGameEvent
+{
+    public int OldScore { get; set; }
+    public int NewScore { get; set; }
+    public int Delta => NewScore - OldScore;
+}
+
+public class LevelCompletedEvent : IGameEvent
+{
+    public int LevelIndex { get; set; }
+    public float ClearTime { get; set; }
+    public int Stars { get; set; }
+}
+```
+
+### 사용 예
+```csharp
+// ===== 발행 (Publisher) =====
+public class Player : MonoBehaviour
+{
+    void TakeDamage(float damage, Vector3 hitPoint)
+    {
+        currentHealth -= damage;
+
+        GameEventSystem.Publish(new PlayerDamagedEvent
+        {
+            Damage = damage,
+            CurrentHealth = currentHealth,
+            HitPoint = hitPoint
+        });
+
+        if (currentHealth <= 0)
+            Die();
+    }
+}
+
+// ===== 구독 (Subscriber) =====
+public class DamageUI : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEventSystem.Subscribe<PlayerDamagedEvent>(OnPlayerDamaged);
+    }
+
+    void OnDisable()
+    {
+        GameEventSystem.Unsubscribe<PlayerDamagedEvent>(OnPlayerDamaged);
+    }
+
+    private void OnPlayerDamaged(PlayerDamagedEvent evt)
+    {
+        ShowDamageText(evt.Damage, evt.HitPoint);
+        UpdateHealthBar(evt.CurrentHealth);
+    }
+}
+
+// ===== 다중 이벤트 구독 =====
+public class AnalyticsManager : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEventSystem.Subscribe<PlayerDamagedEvent>(OnDamage);
+        GameEventSystem.Subscribe<ScoreChangedEvent>(OnScore);
+        GameEventSystem.Subscribe<LevelCompletedEvent>(OnLevelComplete);
+    }
+
+    void OnDisable()
+    {
+        GameEventSystem.Unsubscribe<PlayerDamagedEvent>(OnDamage);
+        GameEventSystem.Unsubscribe<ScoreChangedEvent>(OnScore);
+        GameEventSystem.Unsubscribe<LevelCompletedEvent>(OnLevelComplete);
+    }
+
+    private void OnDamage(PlayerDamagedEvent evt)
+        => LogEvent("player_damaged", ("damage", evt.Damage));
+
+    private void OnScore(ScoreChangedEvent evt)
+        => LogEvent("score_changed", ("delta", evt.Delta));
+
+    private void OnLevelComplete(LevelCompletedEvent evt)
+        => LogEvent("level_complete", ("level", evt.LevelIndex), ("time", evt.ClearTime));
+}
+```
+
+### GameEvents vs GameEventManager
+
+| 항목 | GameEvents (Static) | GameEventManager (Type-based) |
+|------|---------------------|-------------------------------|
+| 이벤트 정의 | `event Action<T>` | `class : IGameEvent` |
+| 데이터 전달 | 매개변수 제한 | 클래스로 무제한 |
+| 타입 안전성 | 중간 | 높음 |
+| 재사용성 | 낮음 | 높음 (이벤트 객체 재사용 가능) |
+| 복잡도 | 낮음 | 중간 |
+| 권장 규모 | 프로토타입/소규모 | 중규모 이상 |
+
+> **선택 기준**: 프로토타입은 GameEvents로 빠르게, 규모가 커지면 GameEventManager로 전환.
